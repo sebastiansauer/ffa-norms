@@ -1,0 +1,414 @@
+---
+title: "FFA-Norm values"
+subtitle: "Based on the 2009 Paper by Kohls, Sauer and Walach"
+author: "Sebastian Sauer"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    toc: yes
+    number_sections: yes
+    standalone: yes 
+    df-print: kable
+    #code_folding: hide
+  word_document:
+    toc: yes
+editor_options:
+  chunk_output_type: console
+---
+
+
+
+
+
+# Summary
+
+
+- This analyses comprises (a) descriptive (summary) statistics as well as (b) norm values
+
+- All analyses were based on the FMI13 as presented in Kohls, Sauer and Walach (2009): 
+
+>   Kohls, N., Sauer, S., & Walach, H. (2009). Facets of mindfulness – Results of an online study investigating the Freiburg mindfulness inventory. *Personality and Individual Differences, 46*(2), 224–230. https://doi.org/10.1016/j.paid.2008.10.009
+ 
+
+- Results are presented  for (a) a general factor solution (b) and for the two factor solution, based on the paper of Kohls, Sauer and Walach (2009)
+
+- The present norm analyses includes the following norm values: z-values, T values, percentage rank empirical, percentage rank based on a normal distribution
+
+- For the descriptive analyses, typical statistics are reproted, ie. mean, sd, range, quartiles, skewness, kurtosis as well as a "0-1-standardized mean", defined as mean/3 (as 3 is the theoretical upper limit of each score). This statistics is meant to easy comparison.
+
+- A number of subgroup results are presented: by sex (female and male), continuous mindfulness training (yes or no), whether intensive mindfulnes retreats have been conducted (yes or noy), whether Vipassana training is practiced (yes or no), age (median split, ie., 49 years)
+
+
+
+
+# Setup
+
+Load R-Packages and other functions used.
+
+```{r libs, message=FALSE}
+library(easystats)
+library(here)
+library(tidyverse)
+#library(knitr)
+library(DataExplorer)
+```
+
+
+
+```{r source-funs}
+source("R-code/funs.R")
+source("R-code/01-prepare-data.R")
+```
+
+
+
+
+
+
+```{r global-knitr-options, include=FALSE}
+  knitr::opts_chunk$set(
+  fig.pos = 'H',
+  fig.asp = 0.618,
+  fig.align='center',
+  fig.width = 8,
+  out.width = "100%",
+  fig.cap = "", 
+  fig.path = "chunk-img/",
+  dpi = 300,
+  # tidy = TRUE,
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  cache = FALSE,
+  fig.show = "hold")
+```
+
+
+
+```{r include=FALSE}
+theme_set(theme_minimal())
+```
+
+
+# Prepare data
+
+
+```{r prepare-data}
+d <- prepare_FMI_data()
+```
+
+The column names are:
+
+```{r results = "hide"}
+d2 <- 
+  d %>%
+  select(-starts_with("FFA_"))
+
+names(d2)
+```
+
+
+
+# Describe data
+
+
+
+
+## Visualization of item distribution
+
+
+```{r plot-distribs}
+d2 %>% 
+  select(ends_with("_mean")) %>% 
+  plot_density() + theme_minimal()
+```
+
+
+
+
+
+
+# Results for the FMI13 overall scale (general factor solution)
+
+
+
+## descriptives
+
+```{r describe-distribs, results="asis"}
+d2 %>% 
+  select(ends_with("_mean")) %>% 
+  describe_distribution(iqr = FALSE, range = TRUE, quartiles = TRUE) %>% 
+  mutate(Mean01 = Mean/3) %>% 
+  relocate(Mean01, .after = Mean) %>% 
+  knitr::kable(digits = 2)
+```
+
+
+## Norms
+
+
+```{r norms-overall, results = "asis"}
+d2 %>% 
+  select(ends_with("_mean")) %>% 
+  map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
+                     digits = 2)) %>% 
+  print()
+```
+
+
+# Norm values for different subgroups
+
+
+The following subgroup variables were considered:
+
+```{r}
+subgroup_vars <- c("Geschlecht", "Achts_regel", "Retreats", "Vip_regel", "age_below_md")
+subgroup_vars
+```
+
+
+
+## Split by sex
+
+
+### Stats
+
+```{r}
+d2 %>% 
+  #filter(Geschlecht %in% c("männlich", "weiblich")) %>% 
+  mutate(Geschlecht = as.character(Geschlecht)) %>% 
+  describe_fmi_stats(var = Geschlecht)
+```
+
+
+Plot:
+
+```{r}
+plot_fmi_descriptives(var = Geschlecht) 
+```
+
+
+### Norms
+
+```{r norms-sex, results = "asis"}
+for (i in unique(d2$Geschlecht)) { 
+  cat("Group: ", i, "\n")
+  d2 %>% 
+    filter(Geschlecht == i) %>% 
+    select(ends_with("_mean")) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2))  %>% print()
+}
+```
+
+
+
+
+## Split by continuous mindfulness training
+
+### Stats
+
+
+```{r}
+describe_fmi_stats(var = Achts_regel)
+```
+
+
+
+
+
+```{r}
+plot_fmi_descriptives(var = Achts_regel)
+```
+
+
+
+### Norms
+
+```{r norms-training, results = "asis"}
+for (i in unique(d2$Achts_regel)) { 
+  cat("Group: ", i, "\n")
+  d2 %>% 
+    filter(Achts_regel == i) %>% 
+    select(ends_with("_mean")) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% print()
+}
+```
+
+
+
+
+
+
+## Split by retreats
+
+
+### Stats
+
+```{r}
+describe_fmi_stats(var = Retreats)
+```
+
+
+
+```{r}
+plot_fmi_descriptives(var = Retreats)
+```
+
+
+### Norms
+
+
+```{r norms-retreats, results = "asis"}
+for (i in unique(d2$Retreats)) { 
+  cat("Group: ", i, "\n")
+  d2 %>% 
+    filter(Retreats == i) %>% 
+    select(ends_with("_mean")) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% 
+    print()
+}
+```
+
+
+
+
+
+## Split by Vipassana continuously
+
+### Stats
+
+
+```{r}
+describe_fmi_stats(var = Vip_regel)
+```
+
+
+
+```{r}
+plot_fmi_descriptives(var = Vip_regel)
+```
+
+
+### Norms
+
+```{r norms-vip, results = "asis"}
+for (i in unique(d2$Vip_regel)) { 
+  cat("Group: ", i, "\n")
+  d2 %>% 
+    filter(Vip_regel == i) %>% 
+    select(ends_with("_mean")) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% 
+    print()
+}
+```
+
+
+
+
+
+
+## Split by Age
+
+### Stats
+
+Median age in sample?
+
+```{r}
+d2$Alter %>% median()
+
+d2 <-
+  d2 %>%
+  mutate(age_below_md = if_else(Alter < median(Alter), "young", "old"))
+```
+
+
+
+```{r}
+describe_fmi_stats(var = Vip_regel)
+```
+
+
+
+
+
+
+```{r}
+plot_fmi_descriptives(var = age_below_md)
+```
+
+### Norms
+
+```{r norms-age, results = "asis"}
+
+for (i in unique(d2$age_below_md)) { 
+  cat("Group: ", i, "\n")
+  d2 %>% 
+    filter(age_below_md == i) %>% 
+    select(ends_with("_mean")) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% 
+    print()
+}
+```
+
+
+
+
+
+
+
+# Overview on descriptive statistics per subgroup
+
+
+
+
+```{r}
+subgroup_stats <- list()
+
+for (i in seq_along(subgroup_vars)){
+
+subgroup_stats[[i]] <- 
+  d2 %>% 
+  select(ends_with("mean"),
+         any_of(subgroup_vars)[i]) %>% 
+  group_by(across(any_of(subgroup_vars[i]))) %>% 
+    describe_distribution() %>% 
+  select(Variable, Mean, SD, IQR, Min, Max, n, .group)
+
+subgroup_stats[[i]][["subgroup_var"]] <- subgroup_vars[i]
+}
+
+subgroup_stats_df <- do.call(rbind, subgroup_stats)
+
+subgroup_stats_df <-
+  subgroup_stats_df %>% 
+  mutate(group = str_remove(.group, "^.+=")) %>% 
+  select(-.group)
+
+display(subgroup_stats_df)
+```
+
+
+
+```{r}
+subgroup_stats_long <- 
+subgroup_stats_df %>% 
+  select(Variable, Mean, SD, group, subgroup_var) %>% 
+  mutate(Subscale = str_remove(Variable, "_mean")) %>% 
+  pivot_longer(-c(Variable, group, Mean, Subscale, subgroup_var), values_to = "SD")
+
+display(subgroup_stats_long)
+
+# subgroup_stats_long %>% 
+#   ggplot(aes(x = Variable, color = group)) +
+#   geom_errorbar(aes(ymin = Mean-SD, ymax = Mean+SD), position = "dodge") +
+#   geom_point2(aes(y = Mean), alpha = .7, size = 2) +
+#   facet_wrap(subgroup_vars ~ Variable, scales = "free")
+```
+
+
+# Session info
+
+```{r}
+sessionInfo()
+```
+

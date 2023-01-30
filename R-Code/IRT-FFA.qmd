@@ -1,0 +1,860 @@
+---
+title: "FFA Rasch Modelling"
+format: html
+author: Sebastian Sauer
+toc: true
+number-sections: true
+---
+
+
+
+```{r global-knitr-options, include=FALSE}
+  knitr::opts_chunk$set(
+  fig.pos = 'H',
+  fig.asp = 0.618,
+  fig.align='center',
+  fig.width = 5,
+  out.width = "100%",
+  fig.cap = "", 
+  fig.path = "chunk-img/",
+  dpi = 300,
+  # tidy = TRUE,
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  cache = TRUE,
+  fig.show = "hold")
+```
+
+
+
+# Setup
+
+
+```{r}
+#| message=FALSE
+library(easystats)  # convinient stats
+library(here)  # path hell
+library(eRm)  # Rasch models
+library(mirt)  # more IRT
+library(MASS)  # stats
+library(lordif)  # DIF
+library(tidyverse)  # data wrangling
+library(psych)  # factor analysis
+library(lavaan)  # CFAs
+library(semPlot)  # SEM plots
+```
+
+
+
+## Import FFA data
+
+
+
+
+```{r}
+d_filename <- "Achtsamkeit_Daten_FFAEichung_rekodiert_2.sav"
+
+d <- data_read(here("raw-data", d_filename))
+```
+
+
+
+## Median split
+
+```{r}
+d2 <- 
+  d %>% 
+  filter(Geschlecht != "divers") %>% 
+  mutate(Geschlecht = as.character(Geschlecht)) %>% 
+  mutate(PHQ_medsplit = ifelse(PHQ_Sum >= median(PHQ_Sum), 1, 0),
+         Alter_medsplit = ifelse(Alter >= median(Alter), 1, 0))
+```
+
+
+Yes, only two cases of sex "divers".
+
+## Check
+
+Can we drop "diverse" sex without loosing much data?
+
+
+```{r}
+d %>% 
+  count(Geschlecht)
+```
+
+
+
+# Prepare data
+
+
+## Select FFA items
+
+```{r}
+ffa_items <-
+  d2 %>% 
+  dplyr::select(starts_with("FFA_"))
+```
+
+
+## Recode
+
+
+```{r}
+ffa_items2 <-
+  ffa_items %>% 
+  mutate(across(.cols = everything(),
+                .fns = ~ case_when(. == "fast nie" ~ 0,
+                                   . == "eher selten" ~ 1,
+                                   . == "relativ oft" ~ 2,
+                                   . == "fast immer" ~ 3)))
+```
+
+
+
+## Check
+
+```{r}
+ffa_items2 %>% 
+ describe_distribution()
+```
+
+
+
+
+## FFA-13
+
+
+```{r ffa13}
+ffa13_items <-
+  ffa_items2 %>% 
+  dplyr::select(-FFA_13_rek)
+
+dim(ffa13_items)
+```
+
+
+
+# IRT Models FFA13 - one factor model
+
+
+## Rating Scale Model (RSM)
+
+
+```{r}
+#| eval: false
+ffa_rsm1 <- RSM(ffa_items2, se = FALSE)
+ffa_rsm1_ppar <- person.parameter(ffa_rsm1)
+```
+
+
+This model does not run, throws error due to singularity in matrix.
+
+
+
+
+## Partial Credit Model (PCM)
+
+
+### Estimate parameters
+
+#### FFA-14: 14 items
+
+```{r pcm1-ffa14}
+ffa_pcm1 <- PCM(ffa_items2)
+thresholds(ffa_pcm1)
+
+ffa_pcm1_ppar <- person.parameter(ffa_pcm1)
+ffa_pcm1_ppar
+
+ffa_pcm1_itemfit <- eRm::itemfit(ffa_pcm1_ppar)
+ffa_pcm1_itemfit
+```
+
+This model shows a bad fit.
+
+
+
+#### FFA-13: 13 item
+
+```{r pcm-13}
+ffa_pcm2 <- PCM(ffa13_items)
+ffa_pcm2_ppar <- person.parameter(ffa_pcm2)
+ffa_pcm2_itemfit2 <- eRm::itemfit(ffa_pcm2_ppar)
+ffa_pcm2_itemfit2
+```
+
+
+
+
+
+
+### Overall Goodness of Fit 
+
+```{r}
+#| eval: false
+#gofIRT(ffa_pcm2_ppar)  # not implemented for polytomuous models yet
+#item_info(ffa_pcm2)
+```
+
+
+
+
+
+
+### Andersen test
+
+Significant results indicate that the exercise parameter differ significantly between the two groups.
+
+```{r}
+LRtest(ffa_pcm2)  # nicht so gut
+LRtest(ffa_pcm2, d2$Evang)  # ok
+LRtest(ffa_pcm2, d2$Theorie)  # nicht so gut
+
+LRtest(ffa_pcm2, d2$PHQ_medsplit)  # nicht so gut
+```
+
+
+
+
+
+### Wald Test
+
+```{r}
+#| error: true
+Waldtest(ffa_pcm2)
+Waldtest(ffa_pcm2, d2$PHQ_medsplit)
+```
+
+
+
+### MLoef Test
+
+```{r}
+MLoef(ffa_pcm2)  # good
+```
+
+
+### Item information 
+
+```{r}
+#| error: true
+plotINFO(ffa_pcm2, legpos = FALSE)
+plotPImap(ffa_pcm2)
+```
+
+
+
+# Two factor model
+
+
+
+## Devise factors
+
+Items were assigned according to Sauer et al., 2013.
+
+
+```{r}
+presence_factor <- c(1, 2, 3, 5, 7)
+acceptance_factor <- c(4, 6, 8, 9, 10, 11, 12, 14)
+```
+
+
+
+```{r ffa13-two-factors-tibbles}
+ffa13_pres <-
+  ffa_items2 %>% 
+  dplyr::select(any_of(presence_factor))
+
+ffa13_acc <-
+  ffa_items2 %>% 
+  dplyr::select(any_of(acceptance_factor))
+```
+
+
+## Check distributions
+
+
+```{r}
+ffa13_pres %>% 
+  describe_distribution()
+```
+
+
+```{r}
+ffa13_acc %>% 
+  describe_distribution()
+```
+
+
+## Any categories not chosen?
+
+Let's check if any category was not chosen at all, which may cause the model to fail [according to this source](https://stackoverflow.com/questions/67338560/zeroinfl-model-warning-message-in-sqrtdiagobjectvcov-nans-produced).
+
+
+
+```{r}
+ffa13_acc %>% 
+  pivot_longer(everything(), names_to = "item", values_to = "category") %>% 
+  count(item, category, sort = TRUE)
+```
+
+However, there appear to be no category with zero count.
+
+
+
+
+# RSM
+
+
+## Presence
+
+### Parameter estimation
+
+```{r 2f-rsm1-pres}
+#| eval: TRUE
+ffa_rsm1_pres <- RSM(ffa13_pres, se = TRUE)
+ffa_rsm1_pres
+ffa_rsm1_pres_ppar <- person.parameter(ffa_rsm1_pres)
+```
+
+
+### Itemfit
+
+```{r}
+eRm::itemfit(ffa_rsm1_pres_ppar)
+```
+
+Looks good.
+
+
+### Andersen test
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+```{r}
+LRtest(ffa_rsm1_pres)  # sign.
+LRtest(ffa_rsm1_pres, d2$Evang)  # sign
+LRtest(ffa_rsm1_pres, d2$Theorie)  # sign
+
+#PHQ_medsplit <- ifelse(d$PHQ_Sum >= median(d$PHQ_Sum), "+", "-")
+LRtest(ffa_rsm1_pres, d2$PHQ_medsplit)  # sign
+
+```
+
+
+
+
+
+### Wald Test
+
+The Wald Tests computes the difference in item difficulty normalized to their SE between two groups.
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+
+```{r}
+Waldtest(ffa_rsm1_pres)  # sign mostly
+Waldtest(ffa_rsm1_pres, d2$PHQ_medsplit)  # signif mostly
+```
+
+
+### MLOEF Test
+
+The M Loef tests checks whether the person parameter differ between items. 
+According to the assumptions of the Rasch models, we expect invariance,
+i.e., there should be not subset of items for which the person parameters differ from the rest of the items.
+
+
+```{r}
+MLoef(ffa_rsm1_pres)  # signif
+```
+
+
+
+### Item information 
+
+```{r}
+#| error: true
+plotINFO(ffa_rsm1_pres, legpos = FALSE)
+plotPImap(ffa_rsm1_pres)
+```
+
+
+
+
+## Acceptance
+
+### Parameter estimation
+
+This does NOT Run:
+
+```{r 2f-rsm1-acc, message=FALSE}
+#| eval: FALSE
+ffa_rsm1_acc <- RSM(ffa13_acc, se = TRUE)
+ffa_rsm1_acc
+ffa_rsm1_acc_ppar <- person.parameter(ffa_rsm1_acc)
+```
+
+Oh no: NaNs have been produced. There must be some edge cases in the data.
+
+
+
+
+### Itemfit
+
+```{r}
+#| eval: false
+eRm::itemfit(ffa_rsm1_acc_ppar)
+```
+
+
+
+
+
+### Itemfit
+
+```{r}
+eRm::itemfit(ffa_rsm1_pres_ppar)
+```
+
+
+
+### Andersen test
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+```{r}
+#| error: true
+LRtest(ffa_rsm1_acc)  # does not run
+LRtest(ffa_rsm1_acc, d2$Evang)  # sign
+LRtest(ffa_rsm1_acc, d2$Theorie)  # sign
+
+#PHQ_medsplit <- ifelse(d$PHQ_Sum >= median(d$PHQ_Sum), "+", "-")
+LRtest(ffa_rsm1_acc, d2$PHQ_medsplit)  # sign
+
+```
+
+
+
+
+
+### Wald Test
+
+The Wald Tests computes the difference in item difficulty normalized to their SE between two groups.
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+
+This function yields error (singular matrix).
+
+```{r}
+#| error: true
+#Waldtest(ffa_rsm1_acc)  # sign mostly
+#Waldtest(ffa_rsm1_acc, d2$PHQ_medsplit)  # signif mostly
+```
+
+
+### MLOEF Test
+
+The M Loef tests checks whether the person parameter differ between items. 
+According to the assumptions of the Rasch models, we expect invariance,
+i.e., there should be not subset of items for which the person parameters differ from the rest of the items.
+
+
+```{r}
+#| error: true
+MLoef(ffa_rsm1_acc)  # signif
+```
+
+
+
+### Item information 
+
+```{r}
+#| error: true
+plotINFO(ffa_rsm1_acc, legpos = FALSE)
+plotPImap(ffa_rsm1_acc)
+```
+
+
+
+## Conclusion
+
+The RSM is not appropriate for the data for some reason that is not entirely clear.
+
+
+
+# PCM
+
+
+## Presence
+
+### Parameter estimation
+
+```{r 2f-pcm}
+#| eval: true
+ffa_pcm1_pres <- PCM(ffa13_pres, se = TRUE)
+ffa_pcm1_pres
+ffa_pcm1_pres_ppar <- person.parameter(ffa_pcm1_pres)
+```
+
+
+### Itemfit
+
+```{r}
+eRm::itemfit(ffa_pcm1_pres_ppar)
+```
+
+Quite good.
+
+
+
+### Andersen test
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+```{r}
+LRtest(ffa_pcm1_pres)  # sign.
+LRtest(ffa_pcm1_pres, d2$Evang)  # NOT sign
+LRtest(ffa_pcm1_pres, d2$Theorie)  # sign
+
+#PHQ_medsplit <- ifelse(d$PHQ_Sum >= median(d$PHQ_Sum), "+", "-")
+LRtest(ffa_pcm1_pres, d2$PHQ_medsplit)  # sign
+
+```
+
+
+
+
+
+### Wald Test
+
+The Wald Tests computes the difference in item difficulty normalized to their SE between two groups.
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+
+```{r}
+Waldtest(ffa_pcm1_pres)  #  mostly NOT signif
+Waldtest(ffa_pcm1_pres, d2$PHQ_medsplit)  # mixed picture as to signif.
+```
+
+
+
+
+
+
+### MLOEF Test
+
+The M Loef tests checks whether the person parameter differ between items. 
+According to the assumptions of the Rasch models, we expect invariance,
+i.e., there should be not subset of items for which the person parameters differ from the rest of the items.
+
+
+```{r}
+MLoef(ffa_pcm1_pres)  # signif
+```
+
+
+
+### Item information 
+
+```{r}
+#| error: true
+plotINFO(ffa_pcm1_pres, legpos = FALSE)
+plotPImap(ffa_pcm1_pres)
+plotICC(ffa_pcm1_pres,mplot=TRUE,legpos=FALSE,ask=FALSE)
+```
+
+
+
+
+
+
+## Acceptance
+
+
+
+
+### Parameter estimation
+
+```{r 2f-pcm-acc}
+#| eval: true
+ffa_pcm1_acc <- PCM(ffa13_acc, se = TRUE)
+ffa_pcm1_acc
+ffa_pcm1_acc_ppar <- person.parameter(ffa_pcm1_acc)
+```
+
+
+
+
+### Itemfit
+
+```{r}
+#| eval: true
+eRm::itemfit(ffa_pcm1_acc_ppar)
+```
+
+Quite good.
+
+
+
+
+
+
+
+### Andersen test
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+```{r}
+#| error: true
+LRtest(ffa_pcm1_acc)  # signif
+LRtest(ffa_pcm1_acc, d2$Evang)  # NOT sign
+LRtest(ffa_pcm1_acc, d2$Theorie)  # sign
+
+#PHQ_medsplit <- ifelse(d$PHQ_Sum >= median(d$PHQ_Sum), "+", "-")
+LRtest(ffa_pcm1_acc, d2$PHQ_medsplit)  # sign
+
+```
+
+
+
+
+
+### Wald Test
+
+The Wald Tests computes the difference in item difficulty normalized to their SE between two groups.
+
+A significant results indicates that the item parameters differ between groups, which indicates a violation of the Rasch model's assumption.
+
+
+```{r}
+Waldtest(ffa_pcm1_acc)  #  mostly not signif
+Waldtest(ffa_pcm1_acc, d2$PHQ_medsplit)  #  NOT signif
+```
+
+
+### MLOEF Test
+
+The M Loef tests checks whether the person parameter differ between items. 
+According to the assumptions of the Rasch models, we expect invariance,
+i.e., there should be not subset of items for which the person parameters differ from the rest of the items.
+
+
+```{r}
+MLoef(ffa_pcm1_acc)  # NOT signif
+```
+
+
+
+### Item information 
+
+```{r}
+#| error: true
+plotINFO(ffa_pcm1_acc, legpos = FALSE)
+plotPImap(ffa_pcm1_acc)
+```
+
+
+
+# Model comparison
+
+
+## Presence
+
+
+```{r}
+anova(ffa_rsm1_pres, ffa_pcm1_pres)
+```
+
+```{r}
+eRm::IC(ffa_rsm1_pres_ppar)
+eRm::IC(ffa_pcm1_pres_ppar)
+```
+
+Small values are better.
+
+That means the PCM models is to be preferred.
+
+
+
+# DIF Analysis using ordinal logistic regression
+
+
+## Presence 
+
+### Gender
+
+```{r}
+ffa13_pres_dif_geschlecht <- lordif(ffa13_pres, group = d2$Geschlecht, pseudo.R2 = "McFadden", minCell = 5)
+print(ffa13_pres_dif_geschlecht)
+summary(ffa13_pres_dif_geschlecht)
+plot(ffa13_pres_dif_geschlecht, labels = c("Frauen", "Männer"))
+```
+
+Small DIF only, according to the R squeared value.
+
+
+
+### Age
+
+```{r}
+ffa13_pres_dif_age <- lordif(ffa13_pres, group = d2$Alter_medsplit, pseudo.R2 = "McFadden", minCell = 5)
+print(ffa13_pres_dif_age)
+summary(ffa13_pres_dif_age)
+plot(ffa13_pres_dif_age, labels = c("Frauen", "Männer"))
+```
+
+
+Small DIF only, according to the R squeared value.
+
+
+
+
+
+## Acceptance 
+
+### Gender
+
+
+Small DIF only, according to the R squeared value.
+
+
+
+```{r}
+ffa13_acc_dif_geschlecht <- lordif(ffa13_acc, group = d2$Geschlecht, pseudo.R2 = "McFadden", minCell = 5)
+print(ffa13_acc_dif_geschlecht)
+summary(ffa13_acc_dif_geschlecht)
+plot(ffa13_acc_dif_geschlecht, labels = c("Frauen", "Männer"))
+```
+
+
+Small DIF only, according to the R squared value.
+
+
+
+### Age
+
+```{r}
+ffa13_acc_dif_age <- lordif(ffa13_pres, group = d2$Alter_medsplit, pseudo.R2 = "McFadden", minCell = 5)
+print(ffa13_acc_dif_age)
+summary(ffa13_acc_dif_age)
+plot(ffa13_acc_dif_age, labels = c("Frauen", "Männer"))
+```
+
+
+Small DIF only, according to the R squeared value.
+
+
+
+# Dimensionality
+
+## EFA
+
+## Determine number of factors
+
+
+2 factors, oblimin rotation, ML factor scores:
+
+
+```{r fa1}
+ffa_fa <- psych::fa(ffa13_items, nfactors = 2, rotate = "oblimin", fm = "ml")
+print(ffa_fa)
+print(ffa_fa$loadings, cutoff = 0.2)
+```
+
+
+
+Try different number of factors:
+
+
+```{r}
+ffa_div_fa <- nfactors(ffa13_items, n = 5, fm = "ml")
+ffa_div_fa
+```
+
+This analyses both supports the 1- and the 2-F solution.
+
+
+```{r}
+scree(ffa13_items, pc = FALSE)
+```
+Screeplot (in combination with Kaiser criterion) suggests a unidimensional solution.
+
+```{r}
+vss(ffa13_items, fm = "ml", n = 3, plot = FALSE)
+```
+
+VSS seems to suggest a 1 factor solution too.
+
+MAP favors the 1 factor solution too.
+
+### Goodness of fit
+
+```{r}
+summary(ffa_fa)
+```
+
+
+## CFA
+
+### 2F model
+
+```{r}
+ffa_mod <- '
+pres =~ FFA_1 + FFA_2 + FFA_3 + FFA_5 + FFA_7
+acc =~ FFA_4 + FFA_6 + FFA_8 + FFA_9 + FFA_10 + FFA_11 + FFA_12 + FFA_14'
+
+ffa_cfa <- lavaan::cfa(ffa_mod, data = ffa_items2, ordered = TRUE)
+#ffa_cfa <- lavaan::cfa(ffa_mod, data = ffa_items2)
+
+ffa_cfa
+```
+
+```{r}
+semPaths(ffa_cfa, what = "est", intercepts = FALSE, 
+         rotation = 4, edge.color = 1, fade = FALSE, 
+         edge.label.cex = .5, edge.width = .3)
+```
+
+
+```{r}
+summary(ffa_cfa, standardized = TRUE, fit.measures = TRUE)
+```
+
+
+### 1F model
+
+```{r}
+ffa_mod_1F <- 'm =~ FFA_1 + FFA_2 + FFA_3 + FFA_5 + FFA_7 + FFA_4 + FFA_6 + FFA_8 + FFA_9 + FFA_10 + FFA_11 + FFA_12 + FFA_14'
+
+ffa_cfa_1F <- lavaan::cfa(ffa_mod_1F, data = ffa_items2, ordered = TRUE)
+#ffa_cfa <- lavaan::cfa(ffa_mod, data = ffa_items2)
+
+ffa_cfa_1F
+```
+
+
+
+
+```{r}
+semPaths(ffa_cfa_1F, what = "est", intercepts = FALSE, 
+         rotation = 4, edge.color = 1, fade = FALSE, 
+         edge.label.cex = .5, edge.width = .3)
+```
+
+
+```{r}
+summary(ffa_cfa_1F, standardized = TRUE, fit.measures = TRUE)
+```
+
+
+
+
+### Conclusion
+
+
+The CFA seems to speaks in favor of the 2F solution.
