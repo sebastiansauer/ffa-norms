@@ -151,9 +151,50 @@ d2 %>%
 d2 %>% 
   select(ends_with("_mean")) %>% 
   map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
-                     digits = 2)) %>% 
-  print()
+                     digits = 2))
+
 ```
+
+
+```{r}
+norms <-
+d2 %>% 
+  select(ends_with("_mean")) %>% 
+  map(~ compute_all_norms(., 
+                          min_score = 0, 
+                          max_score = 3, 
+                          by = .1), 
+      digits = 2)
+
+
+p_norm1 <- 
+norms %>% 
+  pluck(1) %>%
+  ggplot(aes(x = score, y = z)) +
+  geom_line() 
+
+
+p_norm2 <-
+norms %>% 
+  pluck(1) %>%
+  ggplot(aes(x = score, y = stanine)) +
+  geom_line() +
+  scale_y_continuous(breaks = 1:9)
+
+
+p_norm3 <-
+norms %>% 
+  pluck(1) %>%
+  ggplot(aes(x = score, y = perc_rank)) +
+  geom_line() +
+  labs(x = "Percentage rank")
+
+
+see::plots(p_norm1, p_norm2, p_norm3, tags = TRUE,
+           n_rows = 3,
+           title =  "FMI-13R mean value (x-axis) vs. different norm values (y-axis)")
+```
+
 
 
 # Norm values for different subgroups
@@ -403,6 +444,31 @@ display(subgroup_stats_long)
 #   geom_errorbar(aes(ymin = Mean-SD, ymax = Mean+SD), position = "dodge") +
 #   geom_point2(aes(y = Mean), alpha = .7, size = 2) +
 #   facet_wrap(subgroup_vars ~ Variable, scales = "free")
+```
+
+
+## Regression models
+
+
+
+### m1
+
+```{r}
+m1 <- lm(PHQ_Sum ~ presence_mean + acceptance13_mean, data = d2)
+parameters(m1) %>% display()
+
+performance(m1) %>% display
+```
+
+Standardized data:
+
+```{r}
+parameters(m1, standardize = "refit") %>% display
+```
+
+
+```{r}
+summary(m1)
 ```
 
 
