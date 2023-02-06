@@ -123,6 +123,18 @@ d2 %>%
   plot_density() + theme_minimal()
 ```
 
+Alternative visualization, 
+keeping the x-axis constant:
+
+```{r}
+d2 %>% 
+  select(ends_with("_mean")) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(x = value)) +
+  geom_density() +
+  facet_wrap(~ name) +
+  theme_minimal()
+```
 
 
 
