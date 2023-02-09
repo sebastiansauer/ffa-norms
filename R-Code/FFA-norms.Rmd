@@ -377,7 +377,7 @@ d2 <-
 
 
 ```{r}
-describe_fmi_stats(var = Vip_regel)
+describe_fmi_stats(var = age_below_md)
 ```
 
 
