@@ -4,20 +4,27 @@ subtitle: "Based on the 2009 Paper by Kohls, Sauer and Walach"
 author: "Sebastian Sauer"
 date: "`r Sys.time()`"
 output:
+  html_document:
+    
+    toc: yes
+    number_sections: yes
+    standalone: yes 
+    code-fold: true
+    df-print: kable
+    #code_folding: hide
   pdf_document:
     toc: yes
     number_sections: yes
     extra_dependencies: ["float"]
-  html_document:
+  typst_document:
     toc: yes
     number_sections: yes
-    standalone: yes 
-    df-print: kable
-    #code_folding: hide
   word_document:
     toc: yes
 editor_options:
   chunk_output_type: console
+execute:
+  cache: true
 ---
 
 
@@ -61,6 +68,7 @@ library(gt)
 library(magrittr)  # extract2
 library(lavaan)
 library(semPlot)
+library(psych)
 
 ```
 
@@ -109,6 +117,9 @@ theme_set(theme_minimal())
 d_w_items <- prepare_FMI_data()
 names(d_w_items)
 ```
+
+
+
 
 ## Item labels
 
@@ -160,8 +171,8 @@ keeping the x-axis constant:
 
 ```{r}
 facet_labs <- c(acceptance13_mean = "Acceptance",
-                fmi13_mean = "FMI13",
-                fmi14_mean = "FMI14",
+                fmi13_mean = "FMI-13R",
+                fmi14_mean = "FMI-14",
                 presence_mean = "Presence")
   
 
@@ -173,7 +184,9 @@ d_w_items %>%
   facet_wrap(~ name, labeller = as_labeller(facet_labs)) +
   theme_minimal() +
   theme(strip.text = element_text(size = 14),
-                axis.text = element_text(size =14))
+                axis.text = element_text(size =14)) +
+  labs(y = "",
+       x = "mean score")
 
 ```
 
@@ -190,7 +203,10 @@ d_w_items %>%
   select(ends_with("_mean")) %>% 
   describe_distribution(iqr = FALSE, range = TRUE, quartiles = TRUE) %>% 
   mutate(Mean01 = Mean/3) %>% 
+  mutate(Model = c("FMI-13R", "Presence", "Acceptance", "FMI-14")) |> 
   relocate(Mean01, .after = Mean) %>% 
+  relocate(Model, .before = everything()) |> 
+  select(-Variable, -n_Missing) |> 
   knitr::kable(digits = 2)
 ```
 
@@ -278,11 +294,12 @@ d_w_items |>
   select(starts_with("ffa_", ignore.case = FALSE)) |> 
   psych::alpha()
 
-col_names <- c("Nr.", "mean", "*SD", "*r*", "*r<sub>it</sub>*")
+col_names <- c("Nr.", "mean", "*SD*", "*r<sub>it</sub>*", "*r<sub>it</sub> dropped*")
 
 fmi14_desc1[["item.stats"]] |> 
-  select(mean, sd, r.cor, r.drop) |> 
-    kable(col.names = col_names, escape = FALSE, digits = 2)
+  mutate(nr = 1:14) |> 
+  select(nr, mean, sd, r.cor, r.drop) |> 
+    kable(col.names = col_names, escape = FALSE, digits = 2, row.names = FALSE)
 ```
 
 
@@ -307,17 +324,18 @@ d_w_items |>
   select(-ffa_13r) |> 
   psych::alpha()
 
-col_names <- c("Nr.", "mean", "*SD", "*r*", "*r<sub>it</sub>*")
+col_names <- c("Nr.", "mean", "*SD*", "*r<sub>it</sub>*", "*r<sub>it</sub> dropped*")
 
 fmi13_desc1[["item.stats"]] |> 
-  select(mean, sd, r.cor, r.drop) |> 
-    kable(col.names = col_names, escape = FALSE, digits = 2)
+  mutate(nr = 1:13) |> 
+  select(nr, mean, sd, r.cor, r.drop) |> 
+    kable(col.names = col_names, escape = FALSE, digits = 2, row.names = FALSE)
 ```
 
 
 Omega:
 
-```{r}
+```{r fmi13-omega}
 fmi13_omega <- 
 d_w_items |> 
   select(starts_with("ffa_", ignore.case = FALSE)) |> 
@@ -326,6 +344,313 @@ d_w_items |>
 
 fmi13_omega
 ```
+
+
+
+
+
+
+# CFA
+
+
+
+
+rename the items for the sake of brevity:
+ 
+```{r}
+fmi_items <- 
+ d_w_items %>%
+  select(starts_with("ffa"), mindfulness_experience) |> 
+  rename_with(~ gsub("^ffa_(\\d+[a-zA-Z]?)$", "i\\1", .), 
+              starts_with("ffa_"))
+```
+
+
+
+
+
+## Setup
+
+```{r cfa-setup}
+cfa_results <- list()
+
+get_results_list <- function(cfa_model, model_name) {
+  out <- list()
+  
+  out <- list(
+    obj_name = deparse(substitute(cfa_model)),
+    model_name = model_name,
+   # overview = list(summary(cfa_model)),
+    cfi = fitMeasures(cfa_model)["cfi"],
+    tli = fitMeasures(cfa_model)["tli"],
+    rmsea = fitMeasures(cfa_model)["rmsea"],
+    srmr = fitMeasures(cfa_model)["srmr"]
+  )
+}
+```
+
+
+
+### Tetrachoric correlation matrix
+
+
+```{r polychoric}
+polychoric_r <- polychoric(fmi_items |> select(-mindfulness_experience))
+
+polychoric_rho <- polychoric_r$rho
+
+polychoric_rho[lower.tri(polychoric_r$rho, diag = FALSE)] <- NA
+
+polychoric_rho |> kable( digits = 2)
+```
+
+
+
+
+## One general mindfulness factor, including item 13
+
+
+
+```{r def-modle-one-dim}
+FMI14 <- 
+  "General_Factor=~i1+i2+i3+i4+i5+i6+i7+i8+i9+i10+i11+i12+i13r+i14"
+```
+
+
+### items as categorical, Pearson
+
+```{r}
+one_factor_ordered_pearson <- cfa(FMI14, 
+                          data = fmi_items,
+                          estimator = "DWLS",
+                          ordered = TRUE)
+
+cfa_results[["FMI-14, ordered, Pearson"]] <- 
+  get_results_list(one_factor_ordered_pearson,
+                   model_name = "FMI-14, ordered, Pearson")
+  
+```
+
+
+### items as categorical, Polychoric
+
+```{r}
+one_factor_ordered_polychoric <- cfa(FMI14, 
+                                      data = fmi_items,
+                                      estimator = "DWLS",
+                                      sample.cov = polychoric_rho,
+                                      ordered = TRUE)
+
+cfa_results[["FMI-14, ordered, polychoric"]] <- 
+  get_results_list(one_factor_ordered_polychoric,
+                   model_name = "FMI-14, ordered, polychoric")
+  
+```
+
+
+
+
+### items as numerical
+
+```{r}
+one_factor_numeric <- cfa(FMI14, data = fmi_items)
+
+  cfa_results[["FMI-14, numeric"]] <- 
+  get_results_list(one_factor_numeric,
+                   model_name = "FMI-14, numeric")
+```
+
+
+### items as categorical, Polychoric, mindfulness practitioners only
+
+```{r}
+one_factor_ordered_polychoric_practitioners <- cfa(FMI14, 
+                                     data = fmi_items |> filter(mindfulness_experience == 1),
+                                      estimator = "DWLS",
+                                      sample.cov = polychoric_rho,
+                                      ordered = TRUE)
+
+cfa_results[["FMI-14, ordered, polychoric, mindfulness practitioners"]] <- 
+  get_results_list(one_factor_ordered_polychoric_practitioners,
+                   model_name = "FMI-14, ordered, polychoric, mindfulness practitioners")
+  
+```
+
+
+## Two factors (presence, acceptance) without item 13, correlated factors
+
+```{r}
+FMI13R <- "
+# Presence:
+presence =~ i1 + i2 + i3 + i5 + i7 + i10 
+
+acceptance =~ i4 + i6 + i8 + i9 + i11 + i12 + i14
+
+presence ~~ acceptance
+"
+```
+
+
+
+
+
+
+
+### items as numeric:
+
+```{r}
+two_factors_numeric <- cfa(FMI13R,
+                           data = fmi_items)
+
+cfa_results[["FMI-13R, numeric"]] <-
+  get_results_list(two_factors_numeric,
+                   model_name = "FMI-13R, numeric")
+```
+
+
+### items as categorical, Pearson
+
+```{r}
+model_two_dim_wo_13_ordered <- cfa(FMI13R,
+                                   data = fmi_items,
+                                   estimator = "DWLS",
+                                   ordered = TRUE)
+
+
+cfa_results[["FMI-13R, ordered, Pearson"]] <-
+  get_results_list(model_two_dim_wo_13_ordered,
+                   model_name = "FMI-13R, ordered, Pearson")
+```
+
+### items as categorical, Polychoric
+
+```{r}
+model_two_dim_wo_13_ordered_poly<- cfa(FMI13R,
+                                   data = fmi_items,
+                                   estimator = "DWLS",
+                                   sample.cov = polychoric_rho,
+                                   ordered = TRUE)
+
+
+cfa_results[["FMI-13R, ordered, polychoric"]] <-
+  get_results_list(model_two_dim_wo_13_ordered_poly,
+                   "FMI-13R, ordered, polychoric")
+```
+
+
+### Plot
+
+
+```{r semplot1}
+semPaths(model_two_dim_wo_13_ordered_poly,
+         what = "path",
+         whatLabels = "stand",
+         layout = "circle",
+        # sizeMan = 3,
+         #style = "lisrel",
+         residuals = FALSE,
+         #fixed = FALSE,
+         intercepts = FALSE,
+         normalize = FALSE,
+         thresholds = F,
+         width = 12,
+         height = 6,
+        # rotation = 2,
+        # intAtSide = TRUE,
+       #  nCharNodes = 0
+)
+title("Two factors, ordered, polychoric")
+```
+
+Standardized parameters are shown (loadings, correlations).
+
+
+
+## Two correlated factors, individuals with meditation practice only
+
+### items as numeric
+
+```{r model_two_dim_wo_13_meditators_only}
+model_two_dim_wo_13_meditators_only <- 
+  cfa(FMI13R,
+      data = fmi_items |> filter(mindfulness_experience == 1))
+
+
+cfa_results[["FMI-13R, numeric, mindfulness practitioners"]] <-
+  get_results_list(model_two_dim_wo_13_meditators_only,
+                   model_name = "FMI-13R, numeric, mindfulness practitioners")
+```
+
+
+
+
+
+
+### items as categorical, Pearson
+
+```{r model_two_dim_wo_13_meditators_only_categorical}
+model_two_dim_wo_13_meditators_only_categorical <- 
+  cfa(FMI13R,
+      estimator = "DWLS",
+      ordered = TRUE,
+      data = fmi_items |> filter(mindfulness_experience == 1))
+
+cfa_results[["FMI-13R, ordered, Pearson, mindfulness practitioners"]] <-
+  get_results_list(model_two_dim_wo_13_meditators_only_categorical,
+                   model_name = "FMI-13R, ordered, Pearson, mindfulness practitioners")
+```
+
+
+
+
+### items as categorical, polychoric
+
+```{r model_two_dim_wo_13_meditators_only_categorical_polychoric}
+model_two_dim_wo_13_meditators_only_categorical_poly <- 
+  cfa(FMI13R,
+      estimator = "DWLS",
+      ordered = TRUE,
+      data = fmi_items |> filter(mindfulness_experience == 1))
+
+cfa_results[["FMI-13R, ordered, polychoric, mindfulness practitioners"]] <-
+  get_results_list(model_two_dim_wo_13_meditators_only_categorical_poly,
+                   model_name = "FMI-13R, ordered, polychoric, mindfulness practitioners")
+```
+
+
+## Results
+
+```{r cfa-results}
+cfa_results_df <-
+  do.call(rbind, lapply(cfa_results, as.data.frame))
+
+cfa_results_df |> 
+  select(-obj_name) |> 
+  mutate(Nr = 1:nrow(cfa_results_df)) |> 
+  rename(Model = model_name,
+         CFI = cfi,
+         TLI = tli,
+         RMSEA = rmsea,
+         SRMR = srmr) |> 
+  relocate(Nr, .before = everything()) |> 
+  kable(digits = 2, row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -373,7 +698,8 @@ for (i in unique(d_w_items$Geschlecht)) {
   d_w_items %>% 
     filter(Geschlecht == i) %>% 
     select(ends_with("_mean")) %>% 
-    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2))  %>% print()
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
+                       digits = 2))  %>% print()
 }
 ```
 
@@ -409,7 +735,8 @@ for (i in unique(d_w_items$Achts_regel)) {
   d_w_items %>% 
     filter(Achts_regel == i) %>% 
     select(ends_with("_mean")) %>% 
-    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% print()
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
+                       digits = 2)) %>% print()
 }
 ```
 
@@ -445,7 +772,8 @@ for (i in unique(d_w_items$Retreats)) {
   d_w_items %>% 
     filter(Retreats == i) %>% 
     select(ends_with("_mean")) %>% 
-    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
+                       digits = 2)) %>% 
     print()
 }
 ```
@@ -480,7 +808,8 @@ for (i in unique(d_w_items$Vip_regel)) {
   d_w_items %>% 
     filter(Vip_regel == i) %>% 
     select(ends_with("_mean")) %>% 
-    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
+                       digits = 2)) %>% 
     print()
 }
 ```
@@ -530,7 +859,8 @@ for (i in unique(d_w_items$age_below_md)) {
   d_w_items %>% 
     filter(age_below_md == i) %>% 
     select(ends_with("_mean")) %>% 
-    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), digits = 2)) %>% 
+    map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
+                       digits = 2)) %>% 
     print()
 }
 ```
@@ -546,7 +876,7 @@ for (i in unique(d_w_items$age_below_md)) {
 
 
 
-```{r}
+```{r subgroup-desc-stats}
 subgroup_stats <- list()
 
 for (i in seq_along(subgroup_vars)){
@@ -579,7 +909,8 @@ subgroup_stats_long <-
 subgroup_stats_df %>% 
   select(Variable, Mean, SD, group, subgroup_var) %>% 
   mutate(Subscale = str_remove(Variable, "_mean")) %>% 
-  pivot_longer(-c(Variable, group, Mean, Subscale, subgroup_var), values_to = "SD")
+  pivot_longer(-c(Variable, group, Mean, Subscale, subgroup_var), 
+               values_to = "SD")
 
 display(subgroup_stats_long)
 
@@ -598,229 +929,20 @@ display(subgroup_stats_long)
 ### m1
 
 ```{r m1}
-m1 <- lm(PHQ_Sum ~ presence_mean + acceptance13_mean, data = d_w_items)
+#| eval: false
+m1 <- lm(phq_sum ~ presence_mean + acceptance13_mean, data = d_w_items)
 parameters(m1) %>% display()
 
 performance(m1) %>% display
+summary(m1)
 ```
 
 Standardized data:
 
-```{r}
+```{r m1-params}
+#| eval: false
 parameters(m1, standardize = "refit") %>% display
 ```
-
-
-```{r}
-summary(m1)
-```
-
-
-
-
-
-# CFA
-
-
-
-
-rename the items for the sake of brevity:
- 
-```{r}
-fmi_items <- 
- d_w_items %>%
-  select(starts_with("ffa"), mindfulness_experience) |> 
-  rename_with(~ gsub("^ffa_(\\d+[a-zA-Z]?)$", "i\\1", .), starts_with("ffa_"))
-```
-
-
-
-
-
-## Setup
-
-```{r cfa-setup}
-cfa_results <- list()
-
-get_results_list <- function(cfa_model) {
-  out <- list()
-  
-  out <- list(
-    model_name = deparse(substitute(cfa_model)),
-   # overview = list(summary(cfa_model)),
-    cfi = fitMeasures(cfa_model)["cfi"],
-    tli = fitMeasures(cfa_model)["tli"],
-    rmsea = fitMeasures(cfa_model)["rmsea"],
-    srmr = fitMeasures(cfa_model)["srmr"]
-  )
-}
-```
-
-
-
-## One general mindfulness factor, including item 13
-
-
-
-```{r}
-model_one_dim <- "General_Factor =~  i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8 + i9 + i10 + i11 + i12 + i13r + i14"
-```
-
-
-### items as categorical
-
-```{r}
-model_one_dim_fit_ordered <- cfa(model_one_dim, 
-                                 data = fmi_items,
-                                 estimator = "DWLS",
-                                 ordered = TRUE)
-
-cfa_results[["model_one_dim_fit_ordered"]] <- 
-  get_results_list(model_one_dim_fit_ordered)
-  
-```
-
-
-
-
-
-### items as numerical
-
-```{r}
-model_one_dim_fit_numeric <- cfa(model_one_dim, data = fmi_items)
-
-  cfa_results[["model_one_dim_fit_numeric"]] <- 
-  get_results_list(model_one_dim_fit_numeric)
-```
-
-
-
-
-## Two factors (presence, acceptance) without item 13, correlated factors
-
-```{r}
-model_pres_acc <- "
-# Presence:
-presence =~ i1 + i2 + i3 + i5 + i7 + i10 
-
-acceptance =~ i4 + i6 + i8 + i9 + i11 + i12 + i14
-
-presence ~~ acceptance
-"
-```
-
-
-
-
-
-
-
-### items as numeric:
-
-```{r}
-model_two_dim_wo_13 <- cfa(model_pres_acc,
-                           data = fmi_items)
-
-cfa_results[["model_two_dim_wo_13"]] <-
-  get_results_list(model_two_dim_wo_13)
-```
-
-
-### items as categorical
-
-```{r}
-model_two_dim_wo_13_ordered <- cfa(model_pres_acc,
-                                   data = fmi_items,
-                                   estimator = "DWLS",
-                                   ordered = TRUE)
-
-
-cfa_results[["model_two_dim_wo_13_ordered"]] <-
-  get_results_list(model_two_dim_wo_13_ordered)
-```
-
-
-
-### Plot
-
-
-)
-```{r semplot1}
-semPaths(model_two_dim_wo_13_ordered,
-         what = "stand",
-         whatLabels = "stand",
-         layout = "circle",
-        # sizeMan = 3,
-         #style = "lisrel",
-         residuals = FALSE,
-         #fixed = FALSE,
-         intercepts = FALSE,
-         normalize = FALSE,
-         thresholds = F,
-         width = 12,
-         height = 6,
-        # rotation = 2,
-         intAtSide = TRUE,
-       #  nCharNodes = 0
-)
-title("model_two_dim_wo_13_ordered"
-```
-
-
-
-
-## Two correlated factors, individuals with meditation practice only -------
-
-### items as numeric
-
-```{r}
-model_two_dim_wo_13_meditators_only <- 
-  cfa(model_pres_acc,
-      data = fmi_items |> filter(mindfulness_experience == 1))
-
-
-cfa_results[["model_two_dim_wo_13_meditators_only"]] <-
-  get_results_list(model_two_dim_wo_13_meditators_only)
-```
-
-
-
-
-
-
-### items as categorical
-
-```{r}
-model_two_dim_wo_13_meditators_only_categorical <- 
-  cfa(model_pres_acc,
-      estimator = "DWLS",
-      ordered = TRUE,
-      data = fmi_items |> filter(mindfulness_experience == 1))
-
-cfa_results[["model_two_dim_wo_13_meditators_only_categorical"]] <-
-  get_results_list(model_two_dim_wo_13_meditators_only_categorical)
-```
-
-
-## Results
-
-```{r}
-cfa_results_df <- as.data.frame(cfa_results)
-
-cfa_results_df |> 
-  kable(digits = 2)
-```
-
-
-
-
-
-
-
-
-
-
-
 
 
 
