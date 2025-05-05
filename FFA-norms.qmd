@@ -123,7 +123,7 @@ names(d_w_items)
 
 ## Item labels
 
-```{r}
+```{r item-labels}
 item_labels <- 
   read_csv("metadata/FMI-items.csv") |> 
   mutate(item_name = paste0("FFA_", nr))
@@ -169,7 +169,7 @@ d_w_items %>%
 Alternative visualization, 
 keeping the x-axis constant:
 
-```{r}
+```{r fmi-density-plots}
 facet_labs <- c(acceptance13_mean = "Acceptance",
                 fmi13_mean = "FMI-13R",
                 fmi14_mean = "FMI-14",
