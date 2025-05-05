@@ -35,7 +35,7 @@ compute_all_norms <- function(x, min_score = 0, max_score = max(x), by = .5){
 
 
 
-plot_fmi_descriptives <- function(data = d2, var) {
+plot_fmi_descriptives <- function(data, var) {
   
   d_prepped <- 
    data %>% 
@@ -65,7 +65,7 @@ plot_fmi_descriptives <- function(data = d2, var) {
 
 
 
-describe_fmi_stats <- function(data = d2, var){
+describe_fmi_stats <- function(data, var){
   
   data %>% 
     select(ends_with("_mean"), {{var}}) %>%
