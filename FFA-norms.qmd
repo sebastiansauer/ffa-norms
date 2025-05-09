@@ -3,24 +3,23 @@ title: "FFA-Norm values"
 subtitle: "Based on the 2009 Paper by Kohls, Sauer and Walach"
 author: "Sebastian Sauer"
 date: "`r Sys.time()`"
-output:
-  html_document:
-    
-    toc: yes
-    number_sections: yes
-    standalone: yes 
+format:
+  html:
+    toc: true
+    number-sections: true
+    standalone: true 
     code-fold: true
     df-print: kable
     #code_folding: hide
-  pdf_document:
-    toc: yes
-    number_sections: yes
+  pdf:
+    toc: true
+    number_sections: true
     extra_dependencies: ["float"]
-  typst_document:
-    toc: yes
-    number_sections: yes
-  word_document:
-    toc: yes
+  typst:
+    toc: true
+    number_sections: true
+  docx:
+    toc: true
 editor_options:
   chunk_output_type: console
 execute:
@@ -99,6 +98,8 @@ source("R-code/01-prepare-data.R")
   message = FALSE,
   warning = FALSE,
   cache = TRUE)
+
+options(knitr.kable.NA = "")
 ```
 
 
@@ -384,8 +385,13 @@ get_results_list <- function(cfa_model, model_name) {
     cfi = fitMeasures(cfa_model)["cfi"],
     tli = fitMeasures(cfa_model)["tli"],
     rmsea = fitMeasures(cfa_model)["rmsea"],
-    srmr = fitMeasures(cfa_model)["srmr"]
+    srmr = fitMeasures(cfa_model)["srmr"],
+    chisq = fitMeasures(cfa_model)["chisq"],
+    df = fitMeasures(cfa_model)["df"],
+   pvalue = fitMeasures(cfa_model)["pvalue"]
   )
+  
+  return(out)
 }
 ```
 
@@ -420,10 +426,11 @@ FMI14 <-
 ### items as categorical, Pearson
 
 ```{r}
-one_factor_ordered_pearson <- cfa(FMI14, 
-                          data = fmi_items,
-                          estimator = "DWLS",
-                          ordered = TRUE)
+one_factor_ordered_pearson <- 
+  cfa(FMI14, 
+      data = fmi_items,
+      estimator = "WLSMV",
+      ordered = TRUE)
 
 cfa_results[["FMI-14, ordered, Pearson"]] <- 
   get_results_list(one_factor_ordered_pearson,
@@ -435,11 +442,12 @@ cfa_results[["FMI-14, ordered, Pearson"]] <-
 ### items as categorical, Polychoric
 
 ```{r}
-one_factor_ordered_polychoric <- cfa(FMI14, 
-                                      data = fmi_items,
-                                      estimator = "DWLS",
-                                      sample.cov = polychoric_rho,
-                                      ordered = TRUE)
+one_factor_ordered_polychoric <- 
+  cfa(FMI14, 
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE)
 
 cfa_results[["FMI-14, ordered, polychoric"]] <- 
   get_results_list(one_factor_ordered_polychoric,
@@ -466,7 +474,7 @@ one_factor_numeric <- cfa(FMI14, data = fmi_items)
 ```{r}
 one_factor_ordered_polychoric_practitioners <- cfa(FMI14, 
                                      data = fmi_items |> filter(mindfulness_experience == 1),
-                                      estimator = "DWLS",
+                                      estimator = "WLSMV",
                                       sample.cov = polychoric_rho,
                                       ordered = TRUE)
 
@@ -496,7 +504,7 @@ presence ~~ acceptance
 
 
 
-### items as numeric:
+### items as numeric
 
 ```{r}
 two_factors_numeric <- cfa(FMI13R,
@@ -513,7 +521,7 @@ cfa_results[["FMI-13R, numeric"]] <-
 ```{r}
 model_two_dim_wo_13_ordered <- cfa(FMI13R,
                                    data = fmi_items,
-                                   estimator = "DWLS",
+                                   estimator = "WLSMV",
                                    ordered = TRUE)
 
 
@@ -527,7 +535,7 @@ cfa_results[["FMI-13R, ordered, Pearson"]] <-
 ```{r}
 model_two_dim_wo_13_ordered_poly<- cfa(FMI13R,
                                    data = fmi_items,
-                                   estimator = "DWLS",
+                                   estimator = "WLSMV",
                                    sample.cov = polychoric_rho,
                                    ordered = TRUE)
 
@@ -591,7 +599,7 @@ cfa_results[["FMI-13R, numeric, mindfulness practitioners"]] <-
 ```{r model_two_dim_wo_13_meditators_only_categorical}
 model_two_dim_wo_13_meditators_only_categorical <- 
   cfa(FMI13R,
-      estimator = "DWLS",
+      estimator = "WLSMV",
       ordered = TRUE,
       data = fmi_items |> filter(mindfulness_experience == 1))
 
@@ -608,7 +616,7 @@ cfa_results[["FMI-13R, ordered, Pearson, mindfulness practitioners"]] <-
 ```{r model_two_dim_wo_13_meditators_only_categorical_polychoric}
 model_two_dim_wo_13_meditators_only_categorical_poly <- 
   cfa(FMI13R,
-      estimator = "DWLS",
+      estimator = "WLSMV",
       ordered = TRUE,
       data = fmi_items |> filter(mindfulness_experience == 1))
 
@@ -638,11 +646,359 @@ cfa_results_df |>
 
 
 
+In sum, the results favor model 10 *FMI-13R, ordered, polychoric, mindfulness practitioners*, which show are very good fit.
+However, for the whole sample, model 7 *FMI-13R, ordered, polychoric* is of similar good fit.
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+# Multi-group Confirmatory Factor Analysis (MG-CFA)
+
+
+## Simple multigroup
+
+### FMI-13R, numeric
+
+```{r mgcfa1_num}
+cfa_med_non_med_fmi13_numeric <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      group = "mindfulness_experience")
+
+summary(cfa_med_non_med_fmi13_numeric, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_fmi13_numeric)
+```
+
+
+### FMI-13R, ordered, polychoric
+
+
+```{r mgcfa1_ordered}
+cfa_med_non_med_fmi13_ordered <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE,
+      std.lv = TRUE,
+      group = "mindfulness_experience")
+
+summary(cfa_med_non_med_fmi13_ordered, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_fmi13_ordered)
+```
+
+
+
+## Constraining the latent correlation to be equal
+
+
+```{r}
+FMI13R_cor_constrained <- "
+# Presence:
+presence =~ i1 + i2 + i3 + i5 + i7 + i10 
+
+acceptance =~ i4 + i6 + i8 + i9 + i11 + i12 + i14
+
+presence ~~ c(cor1, cor2)*acceptance
+"
+```
+
+
+
+### FMI-13R, numeric
+
+
+
+```{r mgcfa2}
+cfa_med_non_med_cor_constrained_numeric <- 
+  cfa(model = FMI13R_cor_constrained,
+      data = fmi_items,
+      group = "mindfulness_experience",
+      std.lv = TRUE
+      )
+
+summary(cfa_med_non_med_cor_constrained_numeric, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_cor_constrained_numeric)
+```
+
+
+
+```{r}
+cfa_med_non_med_cor_constrained_numeric2 <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      group = "mindfulness_experience",
+      std.lv = TRUE,
+      group.equal = c("lv.covariances")
+      )
+
+summary(cfa_med_non_med_cor_constrained_numeric2, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_cor_constrained_numeric2)
+```
+
+
+### FMI-13R, ordered
+
+
+
+```{r}
+cfa_med_non_med_cor_constrained_ordered <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE,
+      group = "mindfulness_experience",
+      std.lv = TRUE,
+      group.equal = c("lv.covariances")
+      )
+
+summary(cfa_med_non_med_cor_constrained_ordered, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_cor_constrained_ordered)
+```
+
+
+## Tests between MG-CFA models
+
+
+### ANOVA/Likelihood Ratio Test 
+
+Lower chi square indicates better model fit.
+
+#### Numeric
+
+```{r}
+anova(cfa_med_non_med_fmi13_numeric,
+      cfa_med_non_med_cor_constrained_numeric2) |> 
+  kable(digits = 2)
+```
+
+
+As the p-value is significant at the 5% level,
+we reject the H0 that the simpler model fits the data as well as the more complex model.
+Here, the more complex (unconstrained) models leads to a statistically significant improvement in model fit.
+We should prefer the more complex model.
+However, due to the sensititivity 
+
+
+#### Ordered
+
+```{r}
+anova(cfa_med_non_med_fmi13_ordered,
+      cfa_med_non_med_cor_constrained_ordered)  |> 
+  kable(digits = 2)
+```
+
+
+
+### Differences in Fit indices
+
+Change in *CFI* (Comparative Fit Index): A change (decrease) in CFI of ≤0.01 is often considered indicative of a non-significant difference. Some researchers use a more conservative cutoff of ≤0.005.
+
+Change in *RMSEA* (Root Mean Square Error of Approximation): An increase in RMSEA of ≤0.015 is often considered acceptable. Some use a more conservative cutoff of ≤0.010.
+
+
+Change in *SRMR* (Standardized Root Mean Square Residual): Similar to RMSEA, a small increase in SRMR (e.g., ≤0.01 or ≤0.02) might suggest that the more constrained model has not worsened the fit substantially.
+
+```{r}
+delta_fit <- function(model1, model2, measures = c("cfi", "tli", "rmsea", "srmr")) {
+  
+  out <- list()
+  for (measure in measures) {
+    out[[measure]] <- fitMeasures(model1, measure) - fitMeasures(model2, measure)
+  }
+
+  return(out)
+} 
+  
+```
+
+
+#### Numeric
+
+```{r}
+fit_deltas_numeric <- delta_fit(
+  cfa_med_non_med_fmi13_numeric,
+  cfa_med_non_med_cor_constrained_numeric2)
+
+fit_deltas_numeric
+```
+
+
+#### Ordered
+
+
+```{r}
+fit_deltas_ordered <- 
+  delta_fit(
+    cfa_med_non_med_fmi13_ordered,
+    cfa_med_non_med_cor_constrained_ordered)
+
+fit_deltas_ordered
+```
+
+
+
+### results
+
+```{r}
+fit_deltas_lists <- 
+  list(numeric = fit_deltas_numeric,
+            ordered = fit_deltas_ordered)
+
+fit_deltas_df <-
+  bind_rows(fit_deltas_lists,
+            .id = "type") |> 
+  mutate(across(where(is.numeric), as.numeric))
+
+fit_deltas_df  |> 
+  kable(digits = 3) 
+```
+
+
+
+# Measurement invariance tests 
+
+## Configural model
+
+The configural model tests whether the same factor structure holds across groups without imposing equality constraints.
+
+`cfa_med_non_med_fmi13_ordered`
+
+```{r}
+cfa_med_non_med_fmi13_ordered <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE,
+      std.lv = TRUE,
+      group = "mindfulness_experience")
+
+summary(cfa_med_non_med_fmi13_ordered, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_fmi13_ordered)
+```
+
+## Weak invarance (metric invariance)
+
+
+Metric invariance constrains factor loadings to be equal across groups. This tests whether the construct has the same meaning across groups.
+
+
+
+```{r}
+cfa_med_non_med_cor_constrained_ordered_loadings <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE,
+      group = "mindfulness_experience",
+      std.lv = TRUE,
+      group.equal = c("loadings")
+      )
+
+summary(cfa_med_non_med_cor_constrained_ordered_loadings, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings)
+```
+
+
+
+## Strong invariance (scalar invariance)
+
+Scalar invariance adds constraints on item thresholds (for categorical data) across groups, testing whether group comparisons of latent means are meaningful.
+
+
+```{r}
+cfa_med_non_med_cor_constrained_ordered_loadings_thresholds <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE,
+      group = "mindfulness_experience",
+      std.lv = TRUE,
+      group.equal = c("loadings", "thresholds")
+      )
+
+summary(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds)
+```
+
+
+## Strict invariance
+
+
+```{r}
+cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals <- 
+  cfa(model = FMI13R,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE,
+      group = "mindfulness_experience",
+      std.lv = TRUE,
+      group.equal = c("loadings", "thresholds", "residuals")
+      )
+
+summary(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals, fit.measures= TRUE, standardized = TRUE)
+fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals)
+```
+
+
+## Compare models
+
+```{r}
+invariance_analysis_results_anova <- 
+anova(
+  cfa_med_non_med_fmi13_ordered,
+  cfa_med_non_med_cor_constrained_ordered_loadings,
+  cfa_med_non_med_cor_constrained_ordered_loadings_thresholds,
+  cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals)
+
+invariance_analysis_results_anova |> 
+  kable(digits = 3)
+```
+
+
+```{r}
+invariance_analysis_results_fit_measures <-
+  list(
+    cfa_med_non_med_fmi13_ordered = 
+      get_results_list(cfa_med_non_med_fmi13_ordered, "cfa_med_non_med_fmi13_ordered"),
+    
+       cfa_med_non_med_cor_constrained_ordered_loadings = 
+      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings, "cfa_med_non_med_cor_constrained_ordered_loadings"),
+    
+       cfa_med_non_med_cor_constrained_ordered_loadings_thresholds =
+      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds, "cfa_med_non_med_cor_constrained_ordered_loadings_thresholds"),
+    
+       cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals =
+      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals, "cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals")
+      )
+
+
+invariance_analysis_results_fit_measures_df <-
+  bind_rows(invariance_analysis_results_fit_measures,
+            .id = "type") |> 
+  mutate(across(where(is.numeric), as.numeric)) |> 
+  mutate("Nr." = 1:n()) |> 
+  relocate(Nr., everything())
+
+invariance_analysis_results_fit_measures_df  |> 
+  kable(digits = 3) 
+  
+```
 
 
 
