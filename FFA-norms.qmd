@@ -423,9 +423,24 @@ FMI14 <-
 ```
 
 
+
+
+### items as numerical
+
+```{r one_factor_numeric}
+one_factor_numeric <- cfa(FMI14, data = fmi_items)
+
+  cfa_results[["FMI-14, numeric"]] <- 
+  get_results_list(one_factor_numeric,
+                   model_name = "FMI-14, numeric")
+```
+
+
+
+
 ### items as categorical, Pearson
 
-```{r}
+```{r one_factor_ordered_pearson}
 one_factor_ordered_pearson <- 
   cfa(FMI14, 
       data = fmi_items,
@@ -441,7 +456,7 @@ cfa_results[["FMI-14, ordered, Pearson"]] <-
 
 ### items as categorical, Polychoric
 
-```{r}
+```{r one_factor_ordered_polychoric}
 one_factor_ordered_polychoric <- 
   cfa(FMI14, 
       data = fmi_items,
@@ -458,20 +473,10 @@ cfa_results[["FMI-14, ordered, polychoric"]] <-
 
 
 
-### items as numerical
-
-```{r}
-one_factor_numeric <- cfa(FMI14, data = fmi_items)
-
-  cfa_results[["FMI-14, numeric"]] <- 
-  get_results_list(one_factor_numeric,
-                   model_name = "FMI-14, numeric")
-```
-
 
 ### items as categorical, Polychoric, mindfulness practitioners only
 
-```{r}
+```{r one_factor_ordered_polychoric_practitioners}
 one_factor_ordered_polychoric_practitioners <- cfa(FMI14, 
                                      data = fmi_items |> filter(mindfulness_experience == 1),
                                       estimator = "WLSMV",
@@ -487,7 +492,7 @@ cfa_results[["FMI-14, ordered, polychoric, mindfulness practitioners"]] <-
 
 ## Two factors (presence, acceptance) without item 13, correlated factors
 
-```{r}
+```{r FMI13R}
 FMI13R <- "
 # Presence:
 presence =~ i1 + i2 + i3 + i5 + i7 + i10 
@@ -632,22 +637,38 @@ cfa_results[["FMI-13R, ordered, polychoric, mindfulness practitioners"]] <-
 cfa_results_df <-
   do.call(rbind, lapply(cfa_results, as.data.frame))
 
+cfa_results_prepped <- 
 cfa_results_df |> 
   select(-obj_name) |> 
-  mutate(Nr = 1:nrow(cfa_results_df)) |> 
   rename(Model = model_name,
          CFI = cfi,
          TLI = tli,
          RMSEA = rmsea,
          SRMR = srmr) |> 
+  filter(!str_detect(Model, "Pearson")) |> 
+  mutate(Model = str_replace_all(Model, ", polychoric", "")) |> 
+  mutate(Model = str_replace_all(Model, "mindfulness ", "")) |> 
+  mutate(Nr = row_number()) |> 
   relocate(Nr, .before = everything()) |> 
-  kable(digits = 2, row.names = FALSE)
+  select(Nr, Model, chisq, df, pvalue, CFI, TLI, RMSEA, SRMR)
+
+
+
+cfa_results_prepped |> 
+  names() <- c("Nr", "Model", "MLR χ²", "df", "p-value", "CFI", "TLI", "RMSEA", "SRMR")
+
+  
+  cfa_results_prepped |> 
+  kable(digits = 2, 
+        row.names = FALSE,
+        align = c("l", "l",
+                rep("r", ncol(cfa_results_prepped) - 2)))
 ```
 
 
 
-In sum, the results favor model 10 *FMI-13R, ordered, polychoric, mindfulness practitioners*, which show are very good fit.
-However, for the whole sample, model 7 *FMI-13R, ordered, polychoric* is of similar good fit.
+In sum, the results favor model 10 *FMI-13R, ordered, polychoric, mindfulness practitioners*, which show very good fit.
+However, for the whole sample, model *FMI-13R, ordered, polychoric* is of similar good fit.
 
 
 
@@ -773,7 +794,7 @@ fitMeasures(cfa_med_non_med_cor_constrained_ordered)
 
 ### ANOVA/Likelihood Ratio Test 
 
-Lower chi square indicates better model fit.
+*Lower* chi square indicates better model fit.
 
 #### Numeric
 
@@ -849,7 +870,7 @@ fit_deltas_ordered
 
 
 
-### results
+### Results
 
 ```{r}
 fit_deltas_lists <- 
@@ -883,9 +904,12 @@ cfa_med_non_med_fmi13_ordered <-
       sample.cov = polychoric_rho,
       ordered = TRUE,
       std.lv = TRUE,
+      parameterization = "theta",
       group = "mindfulness_experience")
 
-summary(cfa_med_non_med_fmi13_ordered, fit.measures= TRUE, standardized = TRUE)
+summary(cfa_med_non_med_fmi13_ordered, 
+        fit.measures= TRUE, 
+        standardized = TRUE)
 fitMeasures(cfa_med_non_med_fmi13_ordered)
 ```
 
@@ -896,7 +920,7 @@ Metric invariance constrains factor loadings to be equal across groups. This tes
 
 
 
-```{r}
+```{r cfa_med_non_med_cor_constrained_ordered_loadings}
 cfa_med_non_med_cor_constrained_ordered_loadings <- 
   cfa(model = FMI13R,
       data = fmi_items,
@@ -905,10 +929,13 @@ cfa_med_non_med_cor_constrained_ordered_loadings <-
       ordered = TRUE,
       group = "mindfulness_experience",
       std.lv = TRUE,
+      parameterization = "theta",
       group.equal = c("loadings")
       )
 
-summary(cfa_med_non_med_cor_constrained_ordered_loadings, fit.measures= TRUE, standardized = TRUE)
+summary(cfa_med_non_med_cor_constrained_ordered_loadings, 
+        fit.measures= TRUE, 
+        standardized = TRUE)
 fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings)
 ```
 
@@ -919,7 +946,7 @@ fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings)
 Scalar invariance adds constraints on item thresholds (for categorical data) across groups, testing whether group comparisons of latent means are meaningful.
 
 
-```{r}
+```{r cfa_med_non_med_cor_constrained_ordered_loadings_thresholds}
 cfa_med_non_med_cor_constrained_ordered_loadings_thresholds <- 
   cfa(model = FMI13R,
       data = fmi_items,
@@ -928,10 +955,13 @@ cfa_med_non_med_cor_constrained_ordered_loadings_thresholds <-
       ordered = TRUE,
       group = "mindfulness_experience",
       std.lv = TRUE,
+      parameterization = "theta",
       group.equal = c("loadings", "thresholds")
       )
 
-summary(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds, fit.measures= TRUE, standardized = TRUE)
+summary(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds, 
+        fit.measures= TRUE, 
+        standardized = FALSE)
 fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds)
 ```
 
@@ -939,7 +969,7 @@ fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds)
 ## Strict invariance
 
 
-```{r}
+```{r cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals}
 cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals <- 
   cfa(model = FMI13R,
       data = fmi_items,
@@ -948,30 +978,40 @@ cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals <-
       ordered = TRUE,
       group = "mindfulness_experience",
       std.lv = TRUE,
+      parameterization = "theta",
       group.equal = c("loadings", "thresholds", "residuals")
       )
 
-summary(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals, fit.measures= TRUE, standardized = TRUE)
+summary(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals, 
+        fit.measures= TRUE, 
+        standardized = FALSE)
 fitMeasures(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals)
 ```
 
 
-## Compare models
+## Comparison of models
 
-```{r}
+### LR Tests
+
+```{r invariance_analysis_results_anova}
 invariance_analysis_results_anova <- 
 anova(
   cfa_med_non_med_fmi13_ordered,
   cfa_med_non_med_cor_constrained_ordered_loadings,
   cfa_med_non_med_cor_constrained_ordered_loadings_thresholds,
-  cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals)
+  cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals) |>
+  rownames_to_column() |> 
+  as_tibble() |> 
+  mutate(Invariance = c("Configural", "Weak", "Strong", "Strict")) |> 
+  relocate(Invariance, everything()) |> 
+  rename(model = rowname)
 
-invariance_analysis_results_anova |> 
-  kable(digits = 3)
 ```
 
 
-```{r}
+### More fit indices
+
+```{r invariance_analysis_results_fit_measures}
 invariance_analysis_results_fit_measures <-
   list(
     cfa_med_non_med_fmi13_ordered = 
@@ -992,15 +1032,44 @@ invariance_analysis_results_fit_measures_df <-
   bind_rows(invariance_analysis_results_fit_measures,
             .id = "type") |> 
   mutate(across(where(is.numeric), as.numeric)) |> 
-  mutate("Nr." = 1:n()) |> 
-  relocate(Nr., everything())
+  mutate(Invariance = c("Configural", "Weak", "Strong", "Strict")) |> 
+  relocate(Invariance, everything()) |> 
+  rownames_to_column() |> 
+  rename(model = rowname)
 
-invariance_analysis_results_fit_measures_df  |> 
-  kable(digits = 3) 
-  
+# invariance_analysis_results_fit_measures_df  |> 
+#   select(-c(type, obj_name)) |> 
+#   kable()
 ```
 
 
+
+### Joint table
+
+
+```{r joint-table-invariance-analysis}
+invariance_analysis_results_anova_df <- 
+invariance_analysis_results_anova |> 
+  select(-c(model, AIC, BIC)) |> 
+  left_join(invariance_analysis_results_fit_measures_df |> 
+              select(-c(chisq, df, pvalue, model, obj_name, type, model_name)),
+            by = "Invariance") |> 
+  mutate(Invariance = paste0(1:4, ". ", Invariance)) |> 
+  mutate(across(where(is.numeric), ~ round(., digits = 2))) |> 
+  mutate(`Pr(>Chisq)` = round(`Pr(>Chisq)`, 3)) |> 
+  select(Invariance, Chisq, Df, everything()) |> 
+  mutate_all(function(x) ifelse(is.na(x), "-", x))
+  
+invariance_analysis_results_anova_df |> 
+  names() <- c("Invariance", "MLR χ²","df", "ΔMLR χ²", "Δdf", "p-value", "CFI", "TLI", "RMSEA", "SRMR") 
+  
+  
+invariance_analysis_results_anova_df |> 
+kable(align = c("l", 
+                rep("r", ncol(invariance_analysis_results_anova_df) - 1)))
+#  mutate_at(vars(Chisq, `Chisq diff`, cfi, tli, rmsea, srmr), ~ round(., 2))
+  
+```
 
 
 
