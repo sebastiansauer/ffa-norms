@@ -1,8 +1,8 @@
 ---
-title: "FFA-Norm values"
+title: "FFA-Norm values analyses"
 subtitle: "Based on the 2009 Paper by Kohls, Sauer and Walach"
 author: "Sebastian Sauer"
-date: "`r Sys.time()`"
+date: now
 format:
   html:
     toc: true
@@ -11,15 +11,15 @@ format:
     code-fold: true
     df-print: kable
     #code_folding: hide
-  pdf:
-    toc: true
-    number_sections: true
-    extra_dependencies: ["float"]
-  typst:
-    toc: true
-    number_sections: true
-  docx:
-    toc: true
+  # pdf:
+  #   toc: true
+  #   number_sections: true
+  #   extra_dependencies: ["float"]
+  # typst:
+  #   toc: true
+  #   number_sections: true
+  # docx:
+  #   toc: true
 editor_options:
   chunk_output_type: console
 execute:
@@ -185,9 +185,11 @@ d_w_items %>%
   facet_wrap(~ name, labeller = as_labeller(facet_labs)) +
   theme_minimal() +
   theme(strip.text = element_text(size = 14),
-                axis.text = element_text(size =14)) +
+                axis.text = element_text(size =14),
+        axis.ticks.y = element_blank()) +
   labs(y = "",
-       x = "mean score")
+       x = "mean score") +
+  scale_y_continuous(breaks = NULL)
 
 ```
 
@@ -200,6 +202,7 @@ d_w_items %>%
 "Mean01" refers to a 0-1-standardized mean.
 
 ```{r describe-distribs, results="asis"}
+desc_stats_df <- 
 d_w_items %>% 
   select(ends_with("_mean")) %>% 
   describe_distribution(iqr = FALSE, range = TRUE, quartiles = TRUE) %>% 
@@ -207,7 +210,9 @@ d_w_items %>%
   mutate(Model = c("FMI-13R", "Presence", "Acceptance", "FMI-14")) |> 
   relocate(Mean01, .after = Mean) %>% 
   relocate(Model, .before = everything()) |> 
-  select(-Variable, -n_Missing) |> 
+  select(-Variable, -n_Missing)
+  
+desc_stats_df |> 
   knitr::kable(digits = 2)
 ```
 
@@ -215,19 +220,82 @@ d_w_items %>%
 
 
 
-## Norms
+# Norms overall (no subgroups)
 
+
+## Mean to norms
 
 ```{r norms-overall, results = "asis"}
+
+col_names <- c("Mean", "Percent (empirical)", "z", "Stanine", "T", "Percent (normal)")
+
+norms_list <- 
 d_w_items %>% 
   select(ends_with("_mean")) %>% 
-  map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
-                     digits = 2))
+  map(~ compute_all_norms(., min_score = 0, max_score = 3, by = .1))
+  
+norms_list |> 
+  map(~ knitr::kable(., 
+                     digits = 2, col.names = col_names))
 
 ```
 
 
-```{r}
+## Stanine to means
+
+```{r stanine-to-mean}
+# Z-score boundaries between stanine bands (8 boundaries for 9 bands)
+
+dist_df <-
+  desc_stats_df |> select(Model, Mean, SD)
+
+z_boundaries <- c(-1.75, -1.25, -0.75, -0.25, 0.25, 0.75, 1.25, 1.75)
+
+
+compute_stanine_ranges <- function(Model, Mean, SD) {
+  raw_bounds <- z_boundaries * SD + Mean
+  data.frame(
+    Model = Model,
+    Stanine = 1:9,
+    Lower_Bound = c(-Inf, raw_bounds),
+    Upper_Bound = c(raw_bounds, Inf)
+  )
+}
+
+# Apply to all models
+stanine_table <- pmap_dfr(dist_df, compute_stanine_ranges) |> 
+  rownames_to_column()
+  
+rownames(stanine_table) <- NULL
+```
+
+
+```{r print-norms, results = "asis"}
+# results: asis
+
+
+# Print the result using kable for nicer formatting
+
+
+col_names <- c("Stanine", "Lower Bound Mean Score", "Upper Bound Mean Score")
+
+stanine_table %>%
+  split(.$Model) %>%
+  walk(~{
+    cat("\n\n### Stanine Table for", unique(.$Model), "\n\n")
+    print(kable(select(., -c(Model, rowname)), digits = 1, 
+                row.names = FALSE,
+                col.names = col_names))
+  })
+
+```
+
+
+
+
+## Plot mean to norms
+
+```{r plot-norms}
 norms <-
 d_w_items %>% 
   select(ends_with("_mean")) %>% 
@@ -284,8 +352,33 @@ see::plots(p_norm1, p_norm2, p_norm3, tags = TRUE,
 
 # Item statistics and reliability
 
+Sample size:
+
+```{r sample-size}
+d_w_items |> 
+  select(starts_with("ffa_")) |> 
+  drop_na() |> 
+  nrow()
+```
+
 
 ## FMI14
+
+
+
+Alpha:
+
+```{r fmi14-alpha}
+fmi14_alpha <- 
+d_w_items |> 
+  select(starts_with("ffa_", ignore.case = FALSE)) |> 
+  psych::alpha()
+
+fmi14_alpha
+
+fmi14_alpha[["item.stats"]] |> str()
+```
+
 
 Item statistics:
 
@@ -306,7 +399,7 @@ fmi14_desc1[["item.stats"]] |>
 
 Omega:
 
-```{r}
+```{r fmi14-omega}
 fmi14_omega <- 
 d_w_items |> 
   select(starts_with("ffa_", ignore.case = FALSE)) |> 
@@ -318,6 +411,18 @@ fmi14_omega
 
 ## FMI13-R
 
+Sample size:
+
+```{r sample-size-fm13}
+d_w_items |> 
+  select(starts_with("ffa_", ignore.case = FALSE)) |> 
+  select(-ffa_13r) |> 
+  drop_na() |> 
+  nrow()
+```
+
+Items stats:
+
 ```{r fmi13r-stats}
 fmi13_desc1 <- 
 d_w_items |> 
@@ -328,7 +433,7 @@ d_w_items |>
 col_names <- c("Nr.", "mean", "*SD*", "*r<sub>it</sub>*", "*r<sub>it</sub> dropped*")
 
 fmi13_desc1[["item.stats"]] |> 
-  mutate(nr = 1:13) |> 
+  mutate(nr = c(1:12, 14)) |> 
   select(nr, mean, sd, r.cor, r.drop) |> 
     kable(col.names = col_names, escape = FALSE, digits = 2, row.names = FALSE)
 ```
@@ -358,7 +463,7 @@ fmi13_omega
 
 rename the items for the sake of brevity:
  
-```{r}
+```{r cfa-rename}
 fmi_items <- 
  d_w_items %>%
   select(starts_with("ffa"), mindfulness_experience) |> 
@@ -511,7 +616,7 @@ presence ~~ acceptance
 
 ### items as numeric
 
-```{r}
+```{r cfa-results-numeric}
 two_factors_numeric <- cfa(FMI13R,
                            data = fmi_items)
 
@@ -523,7 +628,7 @@ cfa_results[["FMI-13R, numeric"]] <-
 
 ### items as categorical, Pearson
 
-```{r}
+```{r cfa_model_two_dim_wo_13_ordered}
 model_two_dim_wo_13_ordered <- cfa(FMI13R,
                                    data = fmi_items,
                                    estimator = "WLSMV",
@@ -537,7 +642,7 @@ cfa_results[["FMI-13R, ordered, Pearson"]] <-
 
 ### items as categorical, Polychoric
 
-```{r}
+```{r model_two_dim_wo_13_ordered_poly}
 model_two_dim_wo_13_ordered_poly<- cfa(FMI13R,
                                    data = fmi_items,
                                    estimator = "WLSMV",
@@ -723,7 +828,7 @@ fitMeasures(cfa_med_non_med_fmi13_ordered)
 ## Constraining the latent correlation to be equal
 
 
-```{r}
+```{r def-FMI13R_cor_constrained}
 FMI13R_cor_constrained <- "
 # Presence:
 presence =~ i1 + i2 + i3 + i5 + i7 + i10 
@@ -754,7 +859,7 @@ fitMeasures(cfa_med_non_med_cor_constrained_numeric)
 
 
 
-```{r}
+```{r cfa_med_non_med_cor_constrained_numeric2}
 cfa_med_non_med_cor_constrained_numeric2 <- 
   cfa(model = FMI13R,
       data = fmi_items,
@@ -772,7 +877,7 @@ fitMeasures(cfa_med_non_med_cor_constrained_numeric2)
 
 
 
-```{r}
+```{r cfa_med_non_med_cor_constrained_ordered}
 cfa_med_non_med_cor_constrained_ordered <- 
   cfa(model = FMI13R,
       data = fmi_items,
@@ -798,7 +903,7 @@ fitMeasures(cfa_med_non_med_cor_constrained_ordered)
 
 #### Numeric
 
-```{r}
+```{r anova-numeric}
 anova(cfa_med_non_med_fmi13_numeric,
       cfa_med_non_med_cor_constrained_numeric2) |> 
   kable(digits = 2)
@@ -814,7 +919,7 @@ However, due to the sensititivity
 
 #### Ordered
 
-```{r}
+```{r anova-ordered}
 anova(cfa_med_non_med_fmi13_ordered,
       cfa_med_non_med_cor_constrained_ordered)  |> 
   kable(digits = 2)
@@ -831,7 +936,7 @@ Change in *RMSEA* (Root Mean Square Error of Approximation): An increase in RMSE
 
 Change in *SRMR* (Standardized Root Mean Square Residual): Similar to RMSEA, a small increase in SRMR (e.g., ≤0.01 or ≤0.02) might suggest that the more constrained model has not worsened the fit substantially.
 
-```{r}
+```{r diff-fit-indices}
 delta_fit <- function(model1, model2, measures = c("cfi", "tli", "rmsea", "srmr")) {
   
   out <- list()
@@ -847,7 +952,7 @@ delta_fit <- function(model1, model2, measures = c("cfi", "tli", "rmsea", "srmr"
 
 #### Numeric
 
-```{r}
+```{r fit-diff-num}
 fit_deltas_numeric <- delta_fit(
   cfa_med_non_med_fmi13_numeric,
   cfa_med_non_med_cor_constrained_numeric2)
@@ -859,7 +964,7 @@ fit_deltas_numeric
 #### Ordered
 
 
-```{r}
+```{r fit-diff-ordered}
 fit_deltas_ordered <- 
   delta_fit(
     cfa_med_non_med_fmi13_ordered,
@@ -1081,6 +1186,7 @@ kable(align = c("l",
 
 
 
+
 # Norm values for different subgroups
 
 
@@ -1095,13 +1201,20 @@ subgroup_vars
 
 ## Split by sex
 
+```{r}
+d_w_items_two_sexes <- 
+d_w_items |> 
+  mutate(Geschlecht = as.character(Geschlecht)) %>% 
+  filter(!Geschlecht == "other")
+```
+
+
 
 ### Stats
 
 ```{r}
-d_w_items %>% 
+d_w_items_two_sexes %>% 
   #filter(Geschlecht %in% c("männlich", "weiblich")) %>% 
-  mutate(Geschlecht = as.character(Geschlecht)) %>% 
   describe_fmi_stats(
                      var = Geschlecht)
 ```
@@ -1110,24 +1223,42 @@ d_w_items %>%
 Plot:
 
 ```{r}
-plot_fmi_descriptives(data = d_w_items,
-                      var = Geschlecht) 
+#undebug(plot_fmi_descriptives)
+d_w_items_two_sexes |> 
+  plot_fmi_descriptives(var = Geschlecht) 
 ```
 
 
 ### Norms
 
 ```{r norms-sex, results = "asis"}
-for (i in unique(d_w_items$Geschlecht)) { 
+col_names <- c("Mean", "Percent (empirical)", "z", "Stanine", "T", "Percent (normal)")
+
+for (i in unique(d_w_items_two_sexes$Geschlecht)) { 
   cat("Group: ", i, "\n")
-  d_w_items %>% 
+  cat("\n")
+  d_w_items_two_sexes %>% 
     filter(Geschlecht == i) %>% 
     select(ends_with("_mean")) %>% 
     map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
-                       digits = 2))  %>% print()
+                       digits = 2, col.names = col_names))  %>% print()
 }
 ```
 
+
+<!-- ### Stanine -->
+
+<!-- ```{r} -->
+<!-- d_w_items_two_sexes |>  -->
+<!--   select(ends_with("_mean")) |>  -->
+<!--   map(~ compute_stanine(.)) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- d_w_items_two_sexes$fmi13_mean |>  -->
+<!--   compute_stanine() -->
+<!-- ``` -->
 
 
 
@@ -1137,7 +1268,7 @@ for (i in unique(d_w_items$Geschlecht)) {
 
 
 ```{r}
-describe_fmi_stats(data = d_w_items,
+describe_fmi_stats(data = d_w_items_two_sexes,
                    var = Achts_regel)
 ```
 
@@ -1146,7 +1277,7 @@ describe_fmi_stats(data = d_w_items,
 
 
 ```{r}
-plot_fmi_descriptives(data = d_w_items,
+plot_fmi_descriptives(data = d_w_items_two_sexes,
                       var = Achts_regel)
 ```
 
@@ -1155,13 +1286,15 @@ plot_fmi_descriptives(data = d_w_items,
 ### Norms
 
 ```{r norms-training, results = "asis"}
-for (i in unique(d_w_items$Achts_regel)) { 
+col_names <- c("Mean", "Percent (empirical)", "z", "Stanine", "T", "Percent (normal)")
+
+for (i in unique(d_w_items_two_sexes$Achts_regel)) { 
   cat("Group: ", i, "\n")
-  d_w_items %>% 
+  d_w_items_two_sexes %>% 
     filter(Achts_regel == i) %>% 
     select(ends_with("_mean")) %>% 
     map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
-                       digits = 2)) %>% print()
+                       digits = 2, col.names = col_names)) %>% print()
 }
 ```
 
@@ -1176,14 +1309,14 @@ for (i in unique(d_w_items$Achts_regel)) {
 ### Stats
 
 ```{r}
-describe_fmi_stats(data = d_w_items,
+describe_fmi_stats(data = d_w_items_two_sexes,
                    var = Retreats)
 ```
 
 
 
 ```{r}
-plot_fmi_descriptives(data = d_w_items,
+plot_fmi_descriptives(data = d_w_items_two_sexes,
                       var = Retreats)
 ```
 
@@ -1192,13 +1325,13 @@ plot_fmi_descriptives(data = d_w_items,
 
 
 ```{r norms-retreats, results = "asis"}
-for (i in unique(d_w_items$Retreats)) { 
+for (i in unique(d_w_items_two_sexes$Retreats)) { 
   cat("Group: ", i, "\n")
-  d_w_items %>% 
+  d_w_items_two_sexes %>% 
     filter(Retreats == i) %>% 
     select(ends_with("_mean")) %>% 
     map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
-                       digits = 2)) %>% 
+                       digits = 2, col.names = col_names)) %>% 
     print()
 }
 ```
@@ -1213,14 +1346,14 @@ for (i in unique(d_w_items$Retreats)) {
 
 
 ```{r}
-describe_fmi_stats(data = d_w_items,
+describe_fmi_stats(data = d_w_items_two_sexes,
                    var = Vip_regel)
 ```
 
 
 
 ```{r}
-plot_fmi_descriptives(data = d_w_items,
+plot_fmi_descriptives(data = d_w_items_two_sexes,
                       var = Vip_regel)
 ```
 
@@ -1228,13 +1361,13 @@ plot_fmi_descriptives(data = d_w_items,
 ### Norms
 
 ```{r norms-vip, results = "asis"}
-for (i in unique(d_w_items$Vip_regel)) { 
+for (i in unique(d_w_items_two_sexes$Vip_regel)) { 
   cat("Group: ", i, "\n")
-  d_w_items %>% 
+  d_w_items_two_sexes %>% 
     filter(Vip_regel == i) %>% 
     select(ends_with("_mean")) %>% 
     map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
-                       digits = 2)) %>% 
+                       digits = 2, col.names = col_names)) %>% 
     print()
 }
 ```
@@ -1251,17 +1384,17 @@ for (i in unique(d_w_items$Vip_regel)) {
 Median age in sample?
 
 ```{r}
-d_w_items$Alter %>% median()
+d_w_items_two_sexes$Alter %>% median()
 
-d_w_items <-
-  d_w_items %>%
+d_w_items_two_sexes <-
+  d_w_items_two_sexes %>%
   mutate(age_below_md = if_else(Alter < median(Alter), "young", "old"))
 ```
 
 
 
-```{r}
-describe_fmi_stats(data = d_w_items,
+```{r describe-fmi-stats}
+describe_fmi_stats(data = d_w_items_two_sexes,
                    var = age_below_md)
 ```
 
@@ -1270,22 +1403,23 @@ describe_fmi_stats(data = d_w_items,
 
 
 
-```{r}
-plot_fmi_descriptives(data = d_w_items,
-                      var = age_below_md)
+```{r plot-fmi-desc}
+plot_fmi_descriptives(data = d_w_items_two_sexes,
+                      var = age_below_md) +
+  labs(caption = "Age is splitted at the median FMI score.")
 ```
 
 ### Norms
 
 ```{r norms-age, results = "asis"}
 
-for (i in unique(d_w_items$age_below_md)) { 
+for (i in unique(d_w_items_two_sexes$age_below_md)) { 
   cat("Group: ", i, "\n")
-  d_w_items %>% 
+  d_w_items_two_sexes %>% 
     filter(age_below_md == i) %>% 
     select(ends_with("_mean")) %>% 
     map(~ knitr::kable(compute_all_norms(., min_score = 0, max_score = 3, by = .1), 
-                       digits = 2)) %>% 
+                       digits = 2, col.names = col_names)) %>% 
     print()
 }
 ```
@@ -1307,22 +1441,22 @@ subgroup_stats <- list()
 for (i in seq_along(subgroup_vars)){
 
 subgroup_stats[[i]] <- 
-  d_w_items %>% 
-  select(ends_with("mean"),
+  d_w_items_two_sexes %>% 
+  select(ends_with("_mean"),
          any_of(subgroup_vars)[i]) %>% 
   group_by(across(any_of(subgroup_vars[i]))) %>% 
     describe_distribution() %>% 
-  select(Variable, Mean, SD, IQR, Min, Max, n, .group)
+  select(Variable, Mean, SD, IQR, Min, Max, n)
 
 subgroup_stats[[i]][["subgroup_var"]] <- subgroup_vars[i]
 }
 
 subgroup_stats_df <- do.call(rbind, subgroup_stats)
 
-subgroup_stats_df <-
-  subgroup_stats_df %>% 
-  mutate(group = str_remove(.group, "^.+=")) %>% 
-  select(-.group)
+# subgroup_stats_df <-
+#   subgroup_stats_df %>%
+#   mutate(group = str_remove(.group, "^.+=")) %>%
+#   select(-.group)
 
 display(subgroup_stats_df)
 ```
@@ -1332,9 +1466,9 @@ display(subgroup_stats_df)
 ```{r}
 subgroup_stats_long <- 
 subgroup_stats_df %>% 
-  select(Variable, Mean, SD, group, subgroup_var) %>% 
+  select(Variable, Mean, SD, Subgroup = subgroup_var) %>% 
   mutate(Subscale = str_remove(Variable, "_mean")) %>% 
-  pivot_longer(-c(Variable, group, Mean, Subscale, subgroup_var), 
+  pivot_longer(-c(Variable, Mean, Subscale, Subgroup), 
                values_to = "SD")
 
 display(subgroup_stats_long)
@@ -1355,7 +1489,7 @@ display(subgroup_stats_long)
 
 ```{r m1}
 #| eval: false
-m1 <- lm(phq_sum ~ presence_mean + acceptance13_mean, data = d_w_items)
+m1 <- lm(phq_sum ~ presence_mean + acceptance13_mean, data = d_w_items_two_sexes)
 parameters(m1) %>% display()
 
 performance(m1) %>% display
@@ -1374,7 +1508,7 @@ parameters(m1, standardize = "refit") %>% display
 
 # Session info
 
-```{r}
+```{r session-info}
 sessionInfo()
 ```
 
