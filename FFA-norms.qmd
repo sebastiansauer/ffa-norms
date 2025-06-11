@@ -68,7 +68,7 @@ library(magrittr)  # extract2
 library(lavaan)
 library(semPlot)
 library(psych)
-
+library(tinytable)
 ```
 
 
@@ -350,9 +350,13 @@ see::plots(p_norm1, p_norm2, p_norm3, tags = TRUE,
 
 
 
-# Item statistics and reliability
 
-Sample size:
+# Item statistics for each item
+
+
+## Sample size
+
+
 
 ```{r sample-size}
 d_w_items |> 
@@ -361,6 +365,32 @@ d_w_items |>
   nrow()
 ```
 
+
+## Descriptive statistics (1st to 4th moment)
+
+
+```{r}
+fmi14_stats <- 
+d_w_items |> 
+  select(starts_with("ffa_")) |> 
+  describe_distribution()
+
+fmi14_stats |> 
+  mutate(ID = 1:n()) |> 
+  left_join(item_labels |> 
+              select(ID = nr, Label = label_en, Facet = facet_PAID_2009)) |> 
+  select(ID, Label, Facet, everything(), 
+         -c(IQR, n, n_Missing, Variable, Min, Max)) |> 
+  tt(width = c(0.1, 0.4, .2, .1, .1, .2, .2)) |> 
+  format_tt(digits = 2, num_fmt = "decimal")
+```
+
+
+*Note.* No missing values in all items. Min=0 and Max=3 for each item.
+
+
+
+# Reliability
 
 ## FMI14
 
@@ -388,11 +418,11 @@ d_w_items |>
   select(starts_with("ffa_", ignore.case = FALSE)) |> 
   psych::alpha()
 
-col_names <- c("Nr.", "mean", "*SD*", "*r<sub>it</sub>*", "*r<sub>it</sub> dropped*")
+col_names <- c("Nr.", "*r<sub>it</sub>*", "*r<sub>it</sub> dropped*")
 
 fmi14_desc1[["item.stats"]] |> 
   mutate(nr = 1:14) |> 
-  select(nr, mean, sd, r.cor, r.drop) |> 
+  select(nr, r.cor, r.drop) |> 
     kable(col.names = col_names, escape = FALSE, digits = 2, row.names = FALSE)
 ```
 
@@ -430,12 +460,14 @@ d_w_items |>
   select(-ffa_13r) |> 
   psych::alpha()
 
-col_names <- c("Nr.", "mean", "*SD*", "*r<sub>it</sub>*", "*r<sub>it</sub> dropped*")
+col_names <- c("ID",  "r<sub>it</sub>", "r<sub>it</sub> dropped")
 
 fmi13_desc1[["item.stats"]] |> 
   mutate(nr = c(1:12, 14)) |> 
-  select(nr, mean, sd, r.cor, r.drop) |> 
-    kable(col.names = col_names, escape = FALSE, digits = 2, row.names = FALSE)
+  select(ID = nr, r.cor, r.drop) |> 
+  set_names(col_names) |> 
+  tt(digits = 2, width = .7) |> 
+  style_tt(i = 0, j = c(2,3), italic = TRUE)
 ```
 
 
