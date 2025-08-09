@@ -74,8 +74,9 @@ library(tinytable)
 
 
 ```{r source-funs}
-source("R-code/funs.R")
-source("R-code/01-prepare-data.R")
+source("R/funs.R")
+source("R/01-prepare-data.R")
+source("R/get_results_list.R")
 ```
 
 
@@ -105,6 +106,7 @@ options(knitr.kable.NA = "")
 
 
 ```{r include=FALSE}
+library(ggplot2)
 theme_set(theme_minimal())
 ```
 
@@ -160,13 +162,15 @@ item_labels |>
 
 ## Visualization of factor distributions
 
-This is Figure 1 in the paper.
+
 
 ```{r plot-distribs}
 d_w_items %>% 
   select(ends_with("_mean")) %>% 
   plot_density() + theme_minimal()
 ```
+
+This is Figure 1 in the paper:
 
 Alternative visualization, 
 keeping the x-axis constant:
@@ -532,24 +536,7 @@ fmi_items <-
 ```{r cfa-setup}
 cfa_results <- list()
 
-get_results_list <- function(cfa_model, model_name) {
-  out <- list()
-  
-  out <- list(
-    obj_name = deparse(substitute(cfa_model)),
-    model_name = model_name,
-   # overview = list(summary(cfa_model)),
-    cfi = fitMeasures(cfa_model)["cfi"],
-    tli = fitMeasures(cfa_model)["tli"],
-    rmsea = fitMeasures(cfa_model)["rmsea"],
-    srmr = fitMeasures(cfa_model)["srmr"],
-    chisq = fitMeasures(cfa_model)["chisq"],
-    df = fitMeasures(cfa_model)["df"],
-   pvalue = fitMeasures(cfa_model)["pvalue"]
-  )
-  
-  return(out)
-}
+
 ```
 
 
@@ -1285,16 +1272,20 @@ anova(
 invariance_analysis_results_fit_measures <-
   list(
     cfa_med_non_med_fmi13_ordered = 
-      get_results_list(cfa_med_non_med_fmi13_ordered, "cfa_med_non_med_fmi13_ordered"),
+      get_results_list(cfa_med_non_med_fmi13_ordered, 
+                       "cfa_med_non_med_fmi13_ordered"),
     
        cfa_med_non_med_cor_constrained_ordered_loadings = 
-      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings, "cfa_med_non_med_cor_constrained_ordered_loadings"),
+      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings,
+                       "cfa_med_non_med_cor_constrained_ordered_loadings"),
     
        cfa_med_non_med_cor_constrained_ordered_loadings_thresholds =
-      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds, "cfa_med_non_med_cor_constrained_ordered_loadings_thresholds"),
+      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds,
+                       "cfa_med_non_med_cor_constrained_ordered_loadings_thresholds"),
     
        cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals =
-      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals, "cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals")
+      get_results_list(cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals,
+                       "cfa_med_non_med_cor_constrained_ordered_loadings_thresholds_residuals")
       )
 
 
@@ -1314,7 +1305,7 @@ invariance_analysis_results_fit_measures_df <-
 
 
 
-### Joint table
+### Joint table 1
 
 
 ```{r joint-table-invariance-analysis}
@@ -1328,14 +1319,16 @@ invariance_analysis_results_anova |>
   mutate(across(where(is.numeric), ~ round(., digits = 2))) |> 
   mutate(`Pr(>Chisq)` = round(`Pr(>Chisq)`, 3)) |> 
   select(Invariance, Chisq, Df, everything()) |> 
-  mutate_all(function(x) ifelse(is.na(x), "-", x)) |> 
-  mutate(`Pr(>Chisq)` = case_when(`Pr(>Chisq)` == "0" ~ "< 0.001"))
+  mutate(`Pr(>Chisq)` = case_when(`Pr(>Chisq)` == "0" ~ "< 0.001")) |> 
+  mutate(dCFI = lag(cfi),
+         dRMSEA = lag(rmsea)) |> 
+  mutate_all(function(x) ifelse(is.na(x), "-", x)) 
 
-invariance_analysis_results_anova_df$`p-value`[1] <- "-"
-  
+
 invariance_analysis_results_anova_df |> 
-  names() <- c("Invariance", "MLR χ²","df", "ΔMLR χ²", "Δdf", "p-value", "CFI", "TLI", "RMSEA", "SRMR") 
-  
+  names() <- c("Invariance", "MLR χ²","df", "ΔMLR χ²", "Δdf", "p-value", "CFI", "TLI", "RMSEA", "SRMR", "ΔCFI", "ΔRMSEA") 
+
+# invariance_analysis_results_anova_df$`p-value`[1] <- "-"
   
 invariance_analysis_results_anova_df |> 
 kable(align = c("l", 
@@ -1343,10 +1336,29 @@ kable(align = c("l",
       digits = 2)
 #  mutate_at(vars(Chisq, `Chisq diff`, cfi, tli, rmsea, srmr), ~ round(., 2))
   
+
+
+
 ```
 
 
 
+### Joint Table transposed
+
+```{r invariance_analysis_results_anova_df_transposed}
+invariance_analysis_results_anova_df_transposed <- 
+invariance_analysis_results_anova_df |> 
+  t() |> 
+  as.data.frame() |> 
+  rownames_to_column() |> 
+  slice(-1)
+
+names(invariance_analysis_results_anova_df_transposed) <-
+  c("Coefficient", "M1: Configural", "M2: Weak", "M3: Strong", "M4: Strict")
+
+invariance_analysis_results_anova_df_transposed |> 
+  kable()
+```
 
 
 
