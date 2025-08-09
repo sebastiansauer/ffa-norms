@@ -160,6 +160,7 @@ item_labels |>
 
 ## Visualization of factor distributions
 
+This is Figure 1 in the paper.
 
 ```{r plot-distribs}
 d_w_items %>% 
@@ -175,12 +176,31 @@ facet_labs <- c(acceptance13_mean = "Acceptance",
                 fmi13_mean = "FMI-13R",
                 fmi14_mean = "FMI-14",
                 presence_mean = "Presence")
-  
 
+facet_labs <- factor(facet_labs, 
+                     levels = c("FMI-14", "FMI-13R", "Acceptance", "Presence"))
+  
+d_w_items_long <- 
 d_w_items %>% 
   select(ends_with("_mean")) %>% 
-  pivot_longer(everything()) %>% 
-  ggplot(aes(x = value)) +
+  pivot_longer(everything()) |> 
+  mutate(name = case_when(
+    name == "fmi14_mean" ~ "FMI14",
+    name == "fmi13_mean" ~ "FMI13R",
+    name == "acceptance13_mean" ~ "Acceptance subscale",
+    name == "presence_mean" ~ "Presence subscale"
+  ))
+
+#unique(d_w_items_long$name)
+  
+d_w_items_long$name <- factor(d_w_items_long$name , 
+                     levels = c("FMI14", 
+                                "FMI13R", 
+                                "Acceptance subscale", 
+                                "Presence facet"))
+
+d_w_items_long |> 
+ggplot(aes(x = value)) +
   geom_density() +
   facet_wrap(~ name, labeller = as_labeller(facet_labs)) +
   theme_minimal() +
@@ -627,6 +647,29 @@ cfa_results[["FMI-14, ordered, polychoric, mindfulness practitioners"]] <-
 ```
 
 
+
+
+### NONpractitioners, items as categorical, Polychoric, mindfulness nonpractitioners only
+
+```{r one_factor_ordered_polychoric_nonpractitioners}
+one_factor_ordered_polychoric_nonpractitioners <- cfa(FMI14, 
+                                     data = fmi_items |> filter(mindfulness_experience == 0),
+                                      estimator = "WLSMV",
+                                      sample.cov = polychoric_rho,
+                                      ordered = TRUE)
+
+cfa_results[["FMI-14, ordered, polychoric, mindfulness nonpractitioners"]] <- 
+  get_results_list(one_factor_ordered_polychoric_nonpractitioners,
+                   model_name = "FMI-14, ordered, polychoric, mindfulness nonpractitioners")
+  
+```
+
+
+
+
+
+
+
 ## Two factors (presence, acceptance) without item 13, correlated factors
 
 ```{r FMI13R}
@@ -691,7 +734,7 @@ cfa_results[["FMI-13R, ordered, polychoric"]] <-
 ### Plot
 
 
-```{r semplot1}
+```{r semplot-model_two_dim_wo_13_ordered_poly}
 semPaths(model_two_dim_wo_13_ordered_poly,
          what = "path",
          whatLabels = "stand",
@@ -768,7 +811,97 @@ cfa_results[["FMI-13R, ordered, polychoric, mindfulness practitioners"]] <-
 ```
 
 
+
+
+
+
+
+
+### Plot
+
+
+```{r semplot-model_two_dim_wo_13_ordered_poly-meditators-only}
+semPaths(model_two_dim_wo_13_ordered_poly,
+         what = "path",
+         whatLabels = "stand",
+         layout = "circle",
+        # sizeMan = 3,
+         #style = "lisrel",
+         residuals = FALSE,
+         #fixed = FALSE,
+         intercepts = FALSE,
+         normalize = FALSE,
+         thresholds = F,
+         width = 12,
+         height = 6,
+        # rotation = 2,
+        # intAtSide = TRUE,
+       #  nCharNodes = 0
+)
+title("Two factors, ordered, polychoric")
+```
+
+Standardized parameters are shown (loadings, correlations).
+
+
+
+## NONpractitioners, Two correlated factors, individuals withOUT meditation practice only
+
+### items as numeric
+
+```{r model_two_dim_wo_13_nonmeditators_only}
+model_two_dim_wo_13_non_meditators_only <- 
+  cfa(FMI13R,
+      data = fmi_items |> filter(mindfulness_experience == 0))
+
+
+cfa_results[["FMI-13R, numeric, mindfulness nonpractitioners"]] <-
+  get_results_list(model_two_dim_wo_13_non_meditators_only,
+                   model_name = "FMI-13R, numeric, mindfulness nonpractitioners")
+```
+
+
+
+
+
+
+### items as categorical, Pearson
+
+```{r model_two_dim_wo_13_nonmeditators_only_categorical}
+model_two_dim_wo_13_non_meditators_only_categorical <- 
+  cfa(FMI13R,
+      estimator = "WLSMV",
+      ordered = TRUE,
+      data = fmi_items |> filter(mindfulness_experience == 0))
+
+cfa_results[["FMI-13R, ordered, Pearson, mindfulness nonpractitioners"]] <-
+  get_results_list(model_two_dim_wo_13_non_meditators_only_categorical,
+                   model_name = "FMI-13R, ordered, Pearson, mindfulness nonpractitioners")
+```
+
+
+
+
+### items as categorical, polychoric
+
+```{r model_two_dim_wo_13_nonmeditators_only_categorical_polychoric}
+model_two_dim_wo_13_non_meditators_only_categorical_poly <- 
+  cfa(FMI13R,
+      estimator = "WLSMV",
+      ordered = TRUE,
+      data = fmi_items |> filter(mindfulness_experience == 0))
+
+cfa_results[["FMI-13R, ordered, polychoric, mindfulness nonpractitioners"]] <-
+  get_results_list(model_two_dim_wo_13_meditators_only_categorical_poly,
+                   model_name = "FMI-13R, ordered, polychoric, mindfulness nonpractitioners")
+```
+
+
+
+
+
 ## Results
+
 
 ```{r cfa-results}
 cfa_results_df <-
@@ -795,7 +928,7 @@ cfa_results_prepped |>
   names() <- c("Nr", "Model", "MLR χ²", "df", "p-value", "CFI", "TLI", "RMSEA", "SRMR")
 
   
-  cfa_results_prepped |> 
+cfa_results_prepped |> 
   kable(digits = 2, 
         row.names = FALSE,
         align = c("l", "l",
@@ -1195,7 +1328,10 @@ invariance_analysis_results_anova |>
   mutate(across(where(is.numeric), ~ round(., digits = 2))) |> 
   mutate(`Pr(>Chisq)` = round(`Pr(>Chisq)`, 3)) |> 
   select(Invariance, Chisq, Df, everything()) |> 
-  mutate_all(function(x) ifelse(is.na(x), "-", x))
+  mutate_all(function(x) ifelse(is.na(x), "-", x)) |> 
+  mutate(`Pr(>Chisq)` = case_when(`Pr(>Chisq)` == "0" ~ "< 0.001"))
+
+invariance_analysis_results_anova_df$`p-value`[1] <- "-"
   
 invariance_analysis_results_anova_df |> 
   names() <- c("Invariance", "MLR χ²","df", "ΔMLR χ²", "Δdf", "p-value", "CFI", "TLI", "RMSEA", "SRMR") 
@@ -1203,7 +1339,8 @@ invariance_analysis_results_anova_df |>
   
 invariance_analysis_results_anova_df |> 
 kable(align = c("l", 
-                rep("r", ncol(invariance_analysis_results_anova_df) - 1)))
+                rep("r", ncol(invariance_analysis_results_anova_df) - 1)),
+      digits = 2)
 #  mutate_at(vars(Chisq, `Chisq diff`, cfi, tli, rmsea, srmr), ~ round(., 2))
   
 ```
