@@ -704,6 +704,8 @@ cfa_results[["FMI-13R, ordered, Pearson"]] <-
 
 ### items as categorical, Polychoric
 
+This model fits best the the makeup of the scale.
+
 ```{r model_two_dim_wo_13_ordered_poly}
 model_two_dim_wo_13_ordered_poly<- cfa(FMI13R,
                                    data = fmi_items,
@@ -886,8 +888,81 @@ cfa_results[["FMI-13R, ordered, polychoric, mindfulness nonpractitioners"]] <-
 
 
 
+## Testing essential tau equivalence
 
-## Results
+### Congeneric model
+
+Based on the WSLMV estimator for polychoric item correlation.
+
+```{r}
+model_two_dim_wo_13_ordered_poly
+```
+
+
+### Tau equivalence model
+
+```{r FMI13_tau_equiv}
+FMI13_tau_equiv <- "
+presence =~ load_presence*i1 + load_presence*i2 + load_presence*i3 + load_presence*i5 + load_presence*i7 + load_presence*i10 
+
+acceptance =~ load_acceptance*i4 + load_acceptance*i6 + load_acceptance*i8 + load_acceptance*i9 + load_acceptance*i11 + load_acceptance*i12 + load_acceptance*i14
+
+presence ~~ acceptance
+"
+```
+
+
+```{r}
+model_two_dim_wo_13_ordered_poly_tau_equiv <-
+  cfa(FMI13_tau_equiv,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE)
+
+
+cfa_results[["FMI-13R, ordered, polychoric, equal loadings"]] <-
+  get_results_list(model_two_dim_wo_13_ordered_poly_tau_equiv,
+                   model_name = "FMI-13R, ordered, polychoric, equal loadings")
+```
+
+
+### Comparing model fit between congeneric and tau equivalence
+
+#### Significance
+
+Do not subtract the Likelihoods of the two models. Instead, the *Satorra-Bentler scaled chi-square difference test* should be used to compare the models:
+
+
+```{r anova-model_two_dim_wo_13_ordered_poly--model_two_dim_wo_13_ordered_poly_tau_equiv}
+anova(model_two_dim_wo_13_ordered_poly,  # that's the congeneric model
+      model_two_dim_wo_13_ordered_poly_tau_equiv  #  tau equivalence model
+      )
+```
+
+
+#### Effect size
+
+```{r effect-size-congeneric-minus-tau-equivalence}
+fit_congeneric_measures <-
+  fitMeasures(model_two_dim_wo_13_ordered_poly, 
+                                       c("cfi", "rmsea"))
+
+fit_tau_equiv_measures <- 
+  fitMeasures(model_two_dim_wo_13_ordered_poly_tau_equiv, c("cfi", "rmsea"))
+
+# Calculate the change in CFI
+delta_cfi <- fit_congeneric_measures["cfi"] - fit_tau_equiv_measures["cfi"]
+print(paste("Delta CFI:", round(delta_cfi, 3)))
+
+# Calculate the change in RMSEA
+delta_rmsea <- fit_tau_equiv_measures["rmsea"] - fit_congeneric_measures["rmsea"]
+print(paste("Delta RMSEA:", round(delta_rmsea, 3)))
+```
+
+
+
+## CFA Results
 
 
 ```{r cfa-results}
@@ -1320,8 +1395,8 @@ invariance_analysis_results_anova |>
   mutate(`Pr(>Chisq)` = round(`Pr(>Chisq)`, 3)) |> 
   select(Invariance, Chisq, Df, everything()) |> 
   mutate(`Pr(>Chisq)` = case_when(`Pr(>Chisq)` == "0" ~ "< 0.001")) |> 
-  mutate(dCFI = lag(cfi),
-         dRMSEA = lag(rmsea)) |> 
+  mutate(dCFI = cfi - lag(cfi),
+         dRMSEA = rmsea - lag(rmsea)) |> 
   mutate_all(function(x) ifelse(is.na(x), "-", x)) 
 
 
@@ -1604,8 +1679,6 @@ for (i in unique(d_w_items_two_sexes$age_below_md)) {
     print()
 }
 ```
-
-
 
 
 
