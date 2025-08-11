@@ -69,6 +69,8 @@ library(lavaan)
 library(semPlot)
 library(psych)
 library(tinytable)
+library(reactable)
+library(DT)
 ```
 
 
@@ -535,8 +537,7 @@ fmi_items <-
 
 ```{r cfa-setup}
 cfa_results <- list()
-
-
+cfa_subscales_results <- list()
 ```
 
 
@@ -719,21 +720,36 @@ cfa_results[["FMI-13R, ordered, polychoric"]] <-
                    "FMI-13R, ordered, polychoric")
 ```
 
+#### Summary
 
-### Plot
+```{r}
+summary(model_two_dim_wo_13_ordered_poly, standardized = TRUE)
+```
+
+#### Latent correlation of the two subfactors
+
+```{r}
+std_params <- standardizedSolution(model_two_dim_wo_13_ordered_poly)
+std_correlation <- std_params[std_params$lhs == "presence" & std_params$rhs == "acceptance" & std_params$op == "~~", ]
+std_correlation$est
+```
+
+
+
+#### Plot
 
 
 ```{r semplot-model_two_dim_wo_13_ordered_poly}
 semPaths(model_two_dim_wo_13_ordered_poly,
          what = "path",
-         whatLabels = "stand",
+         whatLabels = "std",
          layout = "circle",
         # sizeMan = 3,
          #style = "lisrel",
          residuals = FALSE,
          #fixed = FALSE,
          intercepts = FALSE,
-         normalize = FALSE,
+         normalize = TRUE,
          thresholds = F,
          width = 12,
          height = 6,
@@ -927,7 +943,7 @@ cfa_results[["FMI-13R, ordered, polychoric, equal loadings"]] <-
 ```
 
 
-### Comparing model fit between congeneric and tau equivalence
+### Comparing model fit between congeneric and tau equivalence - whole FMI13R
 
 #### Significance
 
@@ -962,10 +978,362 @@ print(paste("Delta RMSEA:", round(delta_rmsea, 3)))
 
 
 
+
+
+
+
+### POLY - Comparing model fit between congeneric and tau equivalence - each subscale individually and for polychoric items
+
+
+#### Definition - Congeneric Model
+
+```{r FMI13R-each-subscale-congeneric}
+FMI13R_presence_congeneric <- "
+# Presence:
+presence =~ i1 + i2 + i3 + i5 + i7 + i10 
+"
+
+FMI13R_acceptance_congeneric <- "
+acceptance =~ i4 + i6 + i8 + i9 + i11 + i12 + i14
+"
+```
+
+
+#### CFA for Presence and Acceptance - Congeneric
+
+
+```{r model_presence_wo_13_ordered_poly_congeneric}
+model_presence_wo_13_ordered_poly_congeneric <- 
+  cfa(FMI13R_presence_congeneric,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE)
+
+
+cfa_results[["FMI-13R, Presence, ordered, polychoric"]] <-
+  get_results_list(model_presence_wo_13_ordered_poly_congeneric,
+                   "FMI-13R, Presence, ordered, polychoric, congeneric")
+
+```
+
+
+
+```{r model_acceptance_wo_13_ordered_poly_congeneric}
+model_acceptance_wo_13_ordered_poly_congeneric <- 
+  cfa(FMI13R_acceptance_congeneric,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE)
+
+
+cfa_results[["FMI-13R, Acceptance, ordered, polychoric"]] <-
+  get_results_list(model_acceptance_wo_13_ordered_poly_congeneric,
+                   "FMI-13R, Acceptance, ordered, polychoric, congeneric")
+
+```
+
+
+
+
+
+
+#### Definition - Tau equivalent model
+
+
+
+```{r FMI13R-each-subscale-tau-equivalent}
+FMI13R_presence_tau_equivalent <- "
+# Presence:
+presence =~ load_presence*i1 + load_presence*i2 + load_presence*i3 + load_presence*i5 + load_presence*i7 + load_presence*i10 
+"
+
+FMI13R_acceptance_tau_equivalent <- "
+acceptance =~ load_acceptance*i4 + load_acceptance*i6 + load_acceptance*i8 + load_acceptance*i9 + load_acceptance*i11 + load_acceptance*i12 + load_acceptance*i14
+"
+```
+
+
+#### CFA for Presence and Acceptance - Tau equivalent (polychoric)
+
+##### Presence
+
+```{r model_presence_wo_13_ordered_poly_tau_equiv}
+model_presence_wo_13_ordered_poly_tau_equiv <- 
+  cfa(FMI13R_presence_tau_equivalent,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE)
+
+
+cfa_results[["FMI-13R, Presence, ordered, polychoric, tau equivalent"]] <-
+  get_results_list(model_presence_wo_13_ordered_poly_tau_equiv,
+                   "FMI-13R, Presence, ordered, polychoric, tau equivalent")
+
+```
+
+##### Acceptance
+
+```{r model_acceptance_wo_13_ordered_poly_tau_equiv}
+model_acceptance_wo_13_ordered_poly_tau_equiv <- 
+  cfa(FMI13R_acceptance_tau_equivalent,
+      data = fmi_items,
+      estimator = "WLSMV",
+      sample.cov = polychoric_rho,
+      ordered = TRUE)
+
+
+cfa_results[["FMI-13R, Acceptance, ordered, polychoric, tau equivalent"]] <-
+  get_results_list(model_acceptance_wo_13_ordered_poly_tau_equiv,
+                   "FMI-13R, Acceptance, ordered, polychoric, tau equivalent")
+
+```
+
+
+
+
+
+
+#### Significance - Presence
+
+Do not subtract the Likelihoods of the two models. Instead, the *Satorra-Bentler scaled chi-square difference test* should be used to compare the models:
+
+
+```{r anova-model_presence_wo_13_ordered_poly_--model_presence_wo_13_ordered_poly_tau_equiv}
+anova(model_presence_wo_13_ordered_poly_congeneric,  # that's the congeneric model
+      model_presence_wo_13_ordered_poly_tau_equiv  #  tau equivalence model
+      )
+```
+
+
+#### Effect size - Presence
+
+```{r effect-size-congeneric-minus-tau-equivalence-presence}
+fit_congeneric_measures_presence <-
+  fitMeasures(model_presence_wo_13_ordered_poly_congeneric, 
+                                       c("cfi", "rmsea"))
+
+fit_tau_equiv_measures_presence <- 
+  fitMeasures(model_presence_wo_13_ordered_poly_tau_equiv, 
+              c("cfi", "rmsea"))
+
+# Calculate the change in CFI
+delta_cfi_presence <- 
+  fit_congeneric_measures_presence["cfi"] - 
+  fit_tau_equiv_measures_presence["cfi"]
+print(paste("Delta CFI:", round(delta_cfi_presence, 3)))
+
+# Calculate the change in RMSEA
+delta_rmsea_presence <- 
+  fit_congeneric_measures_presence["rmsea"] -
+  fit_tau_equiv_measures_presence["rmsea"]
+print(paste("Delta RMSEA:", round(delta_rmsea_presence, 3)))
+```
+
+
+
+
+
+
+
+#### Significance - Acceptance
+
+Do not subtract the Likelihoods of the two models. Instead, the *Satorra-Bentler scaled chi-square difference test* should be used to compare the models:
+
+
+```{r anova-model_acceptance_wo_13_ordered_poly_--model_acceptance_wo_13_ordered_poly_tau_equiv}
+anova(model_acceptance_wo_13_ordered_poly_congeneric,  # that's the congeneric model
+      model_acceptance_wo_13_ordered_poly_tau_equiv  #  tau equivalence model
+      )
+```
+
+
+#### Effect size - Acceptance
+
+```{r effect-size-congeneric-minus-tau-equivalence-acceptance}
+fit_congeneric_measures_acceptance <-
+  fitMeasures(model_acceptance_wo_13_ordered_poly_congeneric, 
+                                       c("cfi", "rmsea"))
+
+fit_tau_equiv_measures_acceptance <- 
+  fitMeasures(model_acceptance_wo_13_ordered_poly_tau_equiv,
+              c("cfi", "rmsea"))
+
+# Calculate the change in CFI
+delta_cfi_acceptance <- 
+  fit_congeneric_measures_acceptance["cfi"] -
+  fit_tau_equiv_measures_acceptance["cfi"]
+print(paste("Delta CFI:", round(delta_cfi_acceptance, 3)))
+
+# Calculate the change in RMSEA
+delta_rmsea_acceptance <- 
+  fit_congeneric_measures_acceptance["rmsea"] -
+  fit_tau_equiv_measures_acceptance["rmsea"]
+print(paste("Delta RMSEA:", round(delta_rmsea_acceptance, 3)))
+```
+
+
+
+
+
+
+
+
+### NUM - Comparing model fit between congeneric and tau equivalence - each subscale individually and for NUMERIC items
+
+
+
+#### CFA for Presence and Acceptance - Congeneric, numeric items
+
+
+```{r model_presence_acceptance_wo_13_numeric_congeneric}
+# presence:
+
+model_presence_wo_13_numeric_congeneric <- 
+  cfa(FMI13R_presence_congeneric,
+      data = fmi_items)
+
+cfa_results[["FMI-13R, Presence, numeric"]] <-
+  get_results_list(model_presence_wo_13_numeric_congeneric,
+                   "FMI-13R, Presence, numeric, congeneric")
+
+# acceptance:
+
+model_acceptance_wo_13_numeric_congeneric <- 
+  cfa(FMI13R_acceptance_congeneric,
+      data = fmi_items)
+
+cfa_results[["FMI-13R, Acceptance, numeric"]] <-
+  get_results_list(model_acceptance_wo_13_numeric_congeneric,
+                   "FMI-13R, Acceptance, numeric, congeneric")
+```
+
+
+
+
+
+
+
+
+#### CFA for Presence and Acceptance - Tau equivalent, numeric items
+
+##### Presence
+
+```{r model_presence_wo_13_numeric_tau_equiv}
+model_presence_wo_13_numeric_tau_equiv <- 
+  cfa(FMI13R_presence_tau_equivalent,
+      data = fmi_items)
+
+cfa_results[["FMI-13R, Presence, numeric, tau equivalent"]] <-
+  get_results_list(model_presence_wo_13_numeric_tau_equiv,
+                   "FMI-13R, Presence, numeric, tau equivalent")
+
+```
+
+##### Acceptance
+
+```{r model_acceptance_wo_13_numeric_tau_equiv}
+model_acceptance_wo_13_numeric_tau_equiv <- 
+  cfa(FMI13R_acceptance_tau_equivalent,
+      data = fmi_items)
+
+cfa_results[["FMI-13R, Acceptance, numeric, tau equivalent"]] <-
+  get_results_list(model_acceptance_wo_13_numeric_tau_equiv,
+                   "FMI-13R, Acceptance, numeric, tau equivalent")
+```
+
+
+
+
+
+
+#### Significance - Presence, numeric
+
+Do not subtract the Likelihoods of the two models. Instead, the *Satorra-Bentler scaled chi-square difference test* should be used to compare the models:
+
+
+```{r anova-model_presence_wo_13_numeric_--model_presence_wo_13_numeric_tau_equiv}
+anova(model_presence_wo_13_numeric_congeneric,  # that's the congeneric model
+      model_presence_wo_13_numeric_tau_equiv  #  tau equivalence model
+      )
+```
+
+
+#### Effect size - Presence, numeric
+
+```{r effect-size-congeneric-minus-tau-equivalence-presence-numeric}
+fit_congeneric_measures_presence_numeric <-
+  fitMeasures(model_presence_wo_13_numeric_congeneric, 
+                                       c("cfi", "rmsea"))
+
+fit_tau_equiv_measures_presence_numeric <- 
+  fitMeasures(model_presence_wo_13_numeric_tau_equiv, c("cfi", "rmsea"))
+
+# Calculate the change in CFI
+delta_cfi_presence_numeric <-
+  fit_congeneric_measures_presence_numeric["cfi"] -
+  fit_tau_equiv_measures_presence_numeric["cfi"]
+print(paste("Delta CFI:", round(delta_cfi_presence_numeric, 3)))
+
+# Calculate the change in RMSEA
+delta_rmsea_presence_numeric <-
+  fit_congeneric_measures_presence_numeric["rmsea"] -
+  fit_tau_equiv_measures_presence_numeric["rmsea"]
+print(paste("Delta RMSEA:", round(delta_rmsea_presence_numeric, 3)))
+```
+
+
+
+
+
+
+
+#### Significance - Acceptance
+
+Do not subtract the Likelihoods of the two models. Instead, the *Satorra-Bentler scaled chi-square difference test* should be used to compare the models:
+
+
+```{r anova-model_acceptance_wo_13_numeric_--model_acceptance_wo_13_numeric_tau_equiv}
+anova(model_acceptance_wo_13_numeric_congeneric,  # that's the congeneric model
+      model_acceptance_wo_13_numeric_tau_equiv  #  tau equivalence model
+      )
+```
+
+
+#### Effect size - Acceptance
+
+```{r effect-size-congeneric-minus-tau-equivalence-acceptance-numeric}
+fit_congeneric_measures_acceptance_numeric <-
+  fitMeasures(model_acceptance_wo_13_numeric_congeneric, 
+                                       c("cfi", "rmsea"))
+
+fit_tau_equiv_measures_acceptance_numeric <- 
+  fitMeasures(model_acceptance_wo_13_numeric_tau_equiv, c("cfi", "rmsea"))
+
+# Calculate the change in CFI
+delta_cfi_acceptance_numeric <- 
+  fit_congeneric_measures_acceptance_numeric["cfi"] -
+  fit_tau_equiv_measures_acceptance_numeric["cfi"]
+print(paste("Delta CFI:", round(delta_cfi_acceptance_numeric, 3)))
+
+# Calculate the change in RMSEA
+delta_rmsea_acceptance_numeric <- 
+  fit_congeneric_measures_acceptance_numeric["rmsea"] -
+  fit_tau_equiv_measures_acceptance_numeric["rmsea"]
+print(paste("Delta RMSEA:", round(delta_rmsea_acceptance_numeric, 3)))
+```
+
+
+
+
+
+
+
 ## CFA Results
 
-
-```{r cfa-results}
+```{r prep-cfa-results}
 cfa_results_df <-
   do.call(rbind, lapply(cfa_results, as.data.frame))
 
@@ -985,12 +1353,28 @@ cfa_results_df |>
   select(Nr, Model, chisq, df, pvalue, CFI, TLI, RMSEA, SRMR)
 
 
-
 cfa_results_prepped |> 
   names() <- c("Nr", "Model", "MLR χ²", "df", "p-value", "CFI", "TLI", "RMSEA", "SRMR")
 
+cfa_results_prepped <- 
+cfa_results_prepped |> 
+  rownames_to_column() 
+
+rownames(cfa_results_prepped) <- NULL
+
+cfa_results_prepped <- 
+cfa_results_prepped |>  
+  rename(model_def = rowname)
+```
+
+
+### Static Table
+
+```{r cfa-results-table-static}
+num_cols <- names(cfa_results_prepped)[sapply(cfa_results_prepped, is.numeric)]
   
 cfa_results_prepped |> 
+  select(-model_def) |> 
   kable(digits = 2, 
         row.names = FALSE,
         align = c("l", "l",
@@ -998,10 +1382,40 @@ cfa_results_prepped |>
 ```
 
 
+### Interactive Table
 
-In sum, the results favor model 10 *FMI-13R, ordered, polychoric, mindfulness practitioners*, which show very good fit.
-However, for the whole sample, model *FMI-13R, ordered, polychoric* is of similar good fit.
+#### Reactable
 
+```{r cfa-results-table-interactive-reactable}
+#| eval: true
+
+cfa_results_prepped |> 
+  select(-model_def) |> 
+  reactable(
+    columns = setNames(
+      lapply(num_cols, function(x) colDef(format = colFormat(digits = 2))),
+      num_cols
+    ),
+    searchable = TRUE,
+    filterable = TRUE,
+    sortable = TRUE,
+    pagination = TRUE)
+```
+
+
+#### Datatable
+
+```{r cfa-results-table-interactive-datatable}
+#| results: asis
+#datatable(data.frame())  # Initialize JS renderer
+cfa_results_prepped_datatable <- 
+cfa_results_prepped |> 
+  select(-model_def) |> 
+  DT::datatable(filter = "top") %>%
+  formatRound(columns = num_cols, digits = 2)
+
+print(cfa_results_prepped_datatable)
+```
 
 
 
@@ -1202,7 +1616,7 @@ fit_deltas_ordered
 
 
 
-### Results
+### Results of multigroup CFA
 
 ```{r}
 fit_deltas_lists <- 
@@ -1225,6 +1639,8 @@ fit_deltas_df  |>
 ## Configural model
 
 The configural model tests whether the same factor structure holds across groups without imposing equality constraints.
+
+The FMI13 was used.
 
 `cfa_med_non_med_fmi13_ordered`
 
