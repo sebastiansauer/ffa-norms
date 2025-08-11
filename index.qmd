@@ -843,7 +843,7 @@ semPaths(model_two_dim_wo_13_ordered_poly,
         # intAtSide = TRUE,
        #  nCharNodes = 0
 )
-title("Two factors, ordered, polychoric")
+title("Two factors, ordered, polychoric - mindfulness practitioners only")
 ```
 
 Standardized parameters are shown (loadings, correlations).
@@ -1195,9 +1195,9 @@ model_presence_wo_13_numeric_congeneric <-
   cfa(FMI13R_presence_congeneric,
       data = fmi_items)
 
-cfa_results[["FMI-13R, Presence, numeric"]] <-
+cfa_results[["FMI-13R, Presence, numeric, congeneric"]] <-
   get_results_list(model_presence_wo_13_numeric_congeneric,
-                   "FMI-13R, Presence, numeric, congeneric")
+                   "FMI-13R, Presence, numeric")
 
 # acceptance:
 
@@ -1205,9 +1205,9 @@ model_acceptance_wo_13_numeric_congeneric <-
   cfa(FMI13R_acceptance_congeneric,
       data = fmi_items)
 
-cfa_results[["FMI-13R, Acceptance, numeric"]] <-
+cfa_results[["FMI-13R, Acceptance, numeric, congeneric"]] <-
   get_results_list(model_acceptance_wo_13_numeric_congeneric,
-                   "FMI-13R, Acceptance, numeric, congeneric")
+                   "FMI-13R, Acceptance, numeric")
 ```
 
 
@@ -1333,6 +1333,9 @@ print(paste("Delta RMSEA:", round(delta_rmsea_acceptance_numeric, 3)))
 
 ## CFA Results
 
+All models show congeneric measurement assumptions, if not stated otherwise.
+
+
 ```{r prep-cfa-results}
 cfa_results_df <-
   do.call(rbind, lapply(cfa_results, as.data.frame))
@@ -1348,6 +1351,7 @@ cfa_results_df |>
   filter(!str_detect(Model, "Pearson")) |> 
   mutate(Model = str_replace_all(Model, ", polychoric", "")) |> 
   mutate(Model = str_replace_all(Model, "mindfulness ", "")) |> 
+    mutate(Model = str_replace_all(Model, ", congeneric ", "")) |> 
   mutate(Nr = row_number()) |> 
   relocate(Nr, .before = everything()) |> 
   select(Nr, Model, chisq, df, pvalue, CFI, TLI, RMSEA, SRMR)
